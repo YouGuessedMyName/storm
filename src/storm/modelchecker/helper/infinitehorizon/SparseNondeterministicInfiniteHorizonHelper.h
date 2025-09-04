@@ -81,6 +81,10 @@ class SparseNondeterministicInfiniteHorizonHelper : public SparseInfiniteHorizon
     ValueType computeLraForMecLp(Environment const& env, ValueGetter const& stateValuesGetter, ValueGetter const& actionValuesGetter,
                                  storm::storage::MaximalEndComponent const& mec);
 
+
+    ValueType computeLraForMecPi(Environment const& env, ValueGetter const& stateValuesGetter, ValueGetter const& actionValuesGetter,
+                                 storm::storage::MaximalEndComponent const& mec);
+
     std::pair<storm::storage::SparseMatrix<ValueType>, std::vector<ValueType>> buildSspMatrixVector(
         std::vector<ValueType> const& mecLraValues, std::vector<uint64_t> const& inputToSspStateMap, storm::storage::BitVector const& statesNotInComponent,
         uint64_t numberOfNonComponentStates, std::vector<std::pair<uint64_t, uint64_t>>* sspComponentExitChoicesToOriginalMap);

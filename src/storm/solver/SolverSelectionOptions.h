@@ -8,7 +8,7 @@ namespace solver {
 ExtendEnumsWithSelectionField(MinMaxMethod, ValueIteration, PolicyIteration, LinearProgramming, Topological, RationalSearch, IntervalIteration,
                               SoundValueIteration, OptimisticValueIteration, GuessingValueIteration, ViToPi, ViToLp, Acyclic)
     ExtendEnumsWithSelectionField(MultiplierType, Native, ViOperator) ExtendEnumsWithSelectionField(GameMethod, PolicyIteration, ValueIteration)
-        ExtendEnumsWithSelectionField(LraMethod, LinearProgramming, ValueIteration, GainBiasEquations, LraDistributionEquations)
+        ExtendEnumsWithSelectionField(LraMethod, LinearProgramming, ValueIteration, PolicyIteration, GainBiasEquations, LraDistributionEquations)
             ExtendEnumsWithSelectionField(MaBoundedReachabilityMethod, Imca, UnifPlus)
 
                 ExtendEnumsWithSelectionField(LpSolverType, Gurobi, Glpk, Z3, Soplex)

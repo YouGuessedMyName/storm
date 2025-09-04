@@ -52,6 +52,19 @@ class SparseValueTypeLinearProgrammingEnvironment {
     }
 };
 
+class SparseValueTypePolicyIterationEnvironment {
+public:
+    static const bool isExact = false;
+    typedef double ValueType;
+    typedef storm::models::sparse::Mdp<ValueType> ModelType;
+    static storm::Environment createEnvironment() {
+        storm::Environment env;
+        env.solver().lra().setNondetLraMethod(storm::solver::LraMethod::PolicyIteration);
+        env.solver().lra().setPrecision(storm::utility::convertNumber<storm::RationalNumber>(1e-10));
+        return env;
+    }
+};
+
 class SparseSoundEnvironment {
    public:
     static const bool isExact = false;
@@ -126,7 +139,7 @@ class LraMdpPrctlModelCheckerTest : public ::testing::Test {
     storm::Environment _environment;
 };
 
-typedef ::testing::Types<SparseValueTypeValueIterationEnvironment, SparseValueTypeLinearProgrammingEnvironment, SparseSoundEnvironment
+typedef ::testing::Types<SparseValueTypeValueIterationEnvironment, SparseValueTypeLinearProgrammingEnvironment, SparseValueTypePolicyIterationEnvironment, SparseSoundEnvironment
 #ifdef STORM_HAVE_Z3_OPTIMIZE
                          ,
                          SparseRationalLinearProgrammingEnvironment

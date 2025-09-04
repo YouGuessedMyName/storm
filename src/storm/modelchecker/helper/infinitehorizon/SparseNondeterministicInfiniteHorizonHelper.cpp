@@ -102,18 +102,20 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForC
             "Selecting 'LP' as the solution technique for long-run properties to guarantee exact results. If you want to override this, please explicitly "
             "specify a different LRA method.");
         method = storm::solver::LraMethod::LinearProgramming;
-    } else if (env.solver().isForceSoundness() && env.solver().lra().isNondetLraMethodSetFromDefault() && method != storm::solver::LraMethod::ValueIteration) {
-        STORM_LOG_INFO(
-            "Selecting 'VI' as the solution technique for long-run properties to guarantee sound results. If you want to override this, please explicitly "
-            "specify a different LRA method.");
-        method = storm::solver::LraMethod::ValueIteration;
-    }
+        } else if (env.solver().isForceSoundness() && env.solver().lra().isNondetLraMethodSetFromDefault() && method != storm::solver::LraMethod::ValueIteration) {
+            STORM_LOG_INFO(
+                "Selecting 'VI' as the solution technique for long-run properties to guarantee sound results. If you want to override this, please explicitly "
+                "specify a different LRA method.");
+            method = storm::solver::LraMethod::ValueIteration;
+        }
     STORM_LOG_ERROR_COND(!this->isProduceSchedulerSet() || method == storm::solver::LraMethod::ValueIteration,
                          "Scheduler generation not supported for the chosen LRA method. Try value-iteration.");
     if (method == storm::solver::LraMethod::LinearProgramming) {
         return computeLraForMecLp(env, stateRewardsGetter, actionRewardsGetter, component);
     } else if (method == storm::solver::LraMethod::ValueIteration) {
         return computeLraForMecVi(env, stateRewardsGetter, actionRewardsGetter, component);
+    } else if (method == storm::solver::LraMethod::PolicyIteration) {
+        return computeLraForMecPi(env, stateRewardsGetter, actionRewardsGetter, component);
     } else {
         STORM_LOG_THROW(false, storm::exceptions::InvalidSettingsException, "Unsupported technique.");
     }
@@ -261,6 +263,20 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
     STORM_LOG_THROW(!this->isProduceSchedulerSet(), storm::exceptions::NotImplementedException,
                     "Scheduler extraction is not yet implemented for LP based LRA method.");
     return solver->getContinuousValue(k);
+}
+
+template<typename ValueType>
+ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForMecPi(Environment const& env, ValueGetter const& stateRewardsGetter,
+                                                                                     ValueGetter const& actionRewardsGetter,
+                                                                                     storm::storage::MaximalEndComponent const& mec) {
+    STORM_LOG_THROW(true, storm::exceptions::NotImplementedException,
+        "Policy iteration is not yet implemented for LRA");
+
+    int n = 0;
+    storm::storage::Scheduler< ValueType > scheduler(mec.size());
+
+    // Temporary, until I figure out how to test properly lol
+    return computeLraForMecLp(env, stateRewardsGetter, actionRewardsGetter, mec);
 }
 
 /*!
