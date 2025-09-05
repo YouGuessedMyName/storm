@@ -24,7 +24,7 @@ storm::storage::SparseMatrix<T> applyScheduler(storm::storage::SparseMatrix<T> c
     for (uint_fast64_t state = 0; state < transitionMatrix.getRowGroupCount(); ++state) {
         if (scheduler.isChoiceDefined(state)) {
             // Check whether the choice is valid for this state.
-            uint_fast64_t choice = transitionMatrix.getRowGroupIndices()[state] + scheduler.getChoice(state);
+            uint_fast64_t choice = transitionMatrix.getRowGroupIndices()[state] + scheduler.getChoice(state).getDeterministicChoice();
             if (choice >= transitionMatrix.getRowGroupIndices()[state + 1]) {
                 throw storm::exceptions::InvalidStateException() << "Scheduler defines illegal choice " << choice << " for state " << state << ".";
             }

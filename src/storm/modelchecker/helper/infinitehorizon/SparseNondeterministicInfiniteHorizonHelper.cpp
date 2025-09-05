@@ -277,7 +277,7 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
         "Policy iteration is not yet implemented for LRA");
 
     int n = 0;
-    storm::storage::Scheduler< ValueType > scheduler(this->_transitionMatrix.getRowGroupCount()); // A random scheduler the amount of row groups should be equal to the amount of states.
+    storm::storage::Scheduler<ValueType> scheduler(this->_transitionMatrix.getRowGroupCount()); // A random scheduler the amount of row groups should be equal to the amount of states.
     auto deterministicMatrix = storm::utility::matrix::applyScheduler<ValueType>(this->_transitionMatrix, scheduler); // The induced DTMC
     SparseDeterministicInfiniteHorizonHelper<ValueType> helper(deterministicMatrix);
 
