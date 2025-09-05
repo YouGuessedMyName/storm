@@ -18,7 +18,7 @@ namespace matrix {
  * @return A transition matrix that corresponds to all transitions of the given system that are selected by the given scheduler.
  */
 template<typename T>
-storm::storage::SparseMatrix<T> applyScheduler(storm::storage::SparseMatrix<T> const& transitionMatrix, storm::storage::Scheduler const& scheduler) {
+storm::storage::SparseMatrix<T> applyScheduler(storm::storage::SparseMatrix<T> const& transitionMatrix, storm::storage::Scheduler<T> const& scheduler) {
     storm::storage::SparseMatrixBuilder<T> matrixBuilder(transitionMatrix.getRowGroupCount(), transitionMatrix.getColumnCount());
 
     for (uint_fast64_t state = 0; state < transitionMatrix.getRowGroupCount(); ++state) {

@@ -35,6 +35,12 @@ class Scheduler {
      */
     void setChoice(SchedulerChoice<ValueType> const& choice, uint_fast64_t modelState, uint_fast64_t memoryState = 0);
 
+    // This method was missing but somehow at the same time referenced in matrix.h? Adding it back in.
+    /*!
+     * Is the scheduler defined on this state?
+    */
+    bool isChoiceDefined(int_fast64_t state, uint64_t memoryState = 0) const;
+
     /*!
      * Is the scheduler defined on the states indicated by the selected-states bitvector?
      */

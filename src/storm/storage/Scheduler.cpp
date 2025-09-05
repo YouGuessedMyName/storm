@@ -65,6 +65,12 @@ void Scheduler<ValueType>::setChoice(SchedulerChoice<ValueType> const& choice, u
 }
 
 template<typename ValueType>
+bool Scheduler<ValueType>::isChoiceDefined(int_fast64_t state, uint64_t memoryState) const {
+    auto& schedulerChoice = schedulerChoices[memoryState][state];
+    return schedulerChoice.isDefined();
+}
+
+template<typename ValueType>
 bool Scheduler<ValueType>::isChoiceSelected(BitVector const& selectedStates, uint64_t memoryState) const {
     for (auto selectedState : selectedStates) {
         auto& schedulerChoice = schedulerChoices[memoryState][selectedState];

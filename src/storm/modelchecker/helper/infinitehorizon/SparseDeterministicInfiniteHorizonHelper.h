@@ -52,6 +52,14 @@ class SparseDeterministicInfiniteHorizonHelper : public SparseInfiniteHorizonHel
     std::vector<ValueType> computeLongRunAverageStateDistribution(Environment const& env, uint64_t const& initialState);
     std::vector<ValueType> computeLongRunAverageStateDistribution(Environment const& env, ValueGetter const& initialDistributionGetter);
 
+    /*!
+     * As computeLraForComponent but solves a linear equation system encoding gain and bias (independent of what is set in env)
+     * @see Kretinsky, Meggendorfer: Efficient Strategy Iteration for Mean Payoff in Markov Decision Processes (ATVA 2017),
+     * https://doi.org/10.1007/978-3-319-68167-2_25
+     */
+    std::pair<ValueType, std::vector<ValueType>> computeLraForBsccGainBias(Environment const& env, ValueGetter const& stateValuesGetter,
+                                                                               ValueGetter const& actionValuesGetter,
+                                                                               storm::storage::StronglyConnectedComponent const& bscc);
    protected:
     virtual void createDecomposition() override;
 
@@ -77,15 +85,6 @@ class SparseDeterministicInfiniteHorizonHelper : public SparseInfiniteHorizonHel
      */
     ValueType computeLraForBsccVi(Environment const& env, ValueGetter const& stateValuesGetter, ValueGetter const& actionValuesGetter,
                                   storm::storage::StronglyConnectedComponent const& bscc);
-
-    /*!
-     * As computeLraForComponent but solves a linear equation system encoding gain and bias (independent of what is set in env)
-     * @see Kretinsky, Meggendorfer: Efficient Strategy Iteration for Mean Payoff in Markov Decision Processes (ATVA 2017),
-     * https://doi.org/10.1007/978-3-319-68167-2_25
-     */
-    std::pair<ValueType, std::vector<ValueType>> computeLraForBsccGainBias(Environment const& env, ValueGetter const& stateValuesGetter,
-                                                                           ValueGetter const& actionValuesGetter,
-                                                                           storm::storage::StronglyConnectedComponent const& bscc);
 
     /*!
      * As computeLraForComponent but does the computation by computing the long run average (steady state) distribution (independent of what is set in env)

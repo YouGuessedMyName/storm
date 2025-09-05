@@ -2,6 +2,9 @@
 
 #include "storm/modelchecker/helper/infinitehorizon/internal/ComponentUtility.h"
 #include "storm/modelchecker/helper/infinitehorizon/internal/LraViHelper.h"
+#include "storm/modelchecker/helper/infinitehorizon/SparseDeterministicInfiniteHorizonHelper.h"
+#include "storm/utility/matrix.h"
+#include "storm/storage/SparseMatrix.h"
 
 #include "storm/storage/MaximalEndComponentDecomposition.h"
 #include "storm/storage/Scheduler.h"
@@ -265,6 +268,7 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
     return solver->getContinuousValue(k);
 }
 
+/*! Implementation of calculating Lra using Policy iteration. Follows Algorithm 2 from https://doi.org/10.48550/arXiv.1707.01859 */
 template<typename ValueType>
 ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForMecPi(Environment const& env, ValueGetter const& stateRewardsGetter,
                                                                                      ValueGetter const& actionRewardsGetter,
@@ -273,7 +277,16 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
         "Policy iteration is not yet implemented for LRA");
 
     int n = 0;
-    storm::storage::Scheduler< ValueType > scheduler(mec.size());
+    storm::storage::Scheduler< ValueType > scheduler(this->_transitionMatrix.getRowGroupCount()); // A random scheduler the amount of row groups should be equal to the amount of states.
+    auto deterministicMatrix = storm::utility::matrix::applyScheduler<ValueType>(this->_transitionMatrix, scheduler); // The induced DTMC
+    SparseDeterministicInfiniteHorizonHelper<ValueType> helper(deterministicMatrix);
+
+
+    this->_transitionMatrix;
+    bool gainImprovement = true;
+    while (gainImprovement) {
+        //auto gainBias = helper.computeLraForBsccGainBias(env, stateRewardsGetter, actionRewardsGetter, mec);
+    }
 
     // Temporary, until I figure out how to test properly lol
     return computeLraForMecLp(env, stateRewardsGetter, actionRewardsGetter, mec);
