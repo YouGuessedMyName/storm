@@ -345,7 +345,7 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
                     //unsigned long mecInd = stateToMecIndexMap.at(static_cast<uint64_t>(succ.getColumn())); // might still need this.
                     sum = sum + p * biases.at(succCol);
                 }
-                auto currentOffset = stateRowIndex - succRowIndex;
+                auto currentOffset = succRowIndex - stateRowIndex;
                 auto currentScore = actionRewardsGetter(currentOffset) + sum;
                 // Save the best choice and score, with preference for the previous choice if possible.
                 if (currentScore > bestScore or (currentScore >= bestScore && currentOffset == previousOffset)) {
