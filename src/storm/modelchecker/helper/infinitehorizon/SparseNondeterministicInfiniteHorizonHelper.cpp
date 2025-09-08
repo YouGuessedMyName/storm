@@ -333,22 +333,32 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
 
             unsigned long bestOffset = 0;
             ValueType bestScore;
+            if (this->getOptimizationDirection() == storm::solver::OptimizationDirection::Minimize) {
+                bestScore = storm::utility::infinity<ValueType>();
+            } else {
+                bestScore = - storm::utility::infinity<ValueType>();
+            }
 
             for (auto succRowIndex : choices) {
                 auto succRow = this->_transitionMatrix.getRow(succRowIndex); // Get the row for this choice (i.e. the prob. dist. of succs.)
                 // Now take the weighted sum over the successor's bias
-                ValueType sum; // TODO ask if/how I should initialize this?
+                ValueType sum = storm::utility::zero<ValueType>(); // TODO ask if/how I should initialize this?
                 cout << sum << endl;
                 for (auto succ : succRow) {
                     ValueType p = succ.getValue();
                     auto succCol = succ.getColumn();
                     //unsigned long mecInd = stateToMecIndexMap.at(static_cast<uint64_t>(succ.getColumn())); // might still need this.
+                    auto bias = biases.at(succCol);
                     sum = sum + p * biases.at(succCol);
+                    cout << bias << endl;
                 }
                 auto currentOffset = succRowIndex - stateRowIndex;
                 auto currentScore = actionRewardsGetter(currentOffset) + sum;
                 // Save the best choice and score, with preference for the previous choice if possible.
-                if (currentScore > bestScore or (currentScore >= bestScore && currentOffset == previousOffset)) {
+                if (    (this->getOptimizationDirection() == storm::solver::OptimizationDirection::Minimize &&
+                            (currentScore < bestScore || (currentScore <= bestScore && currentOffset == previousOffset))) ||
+                        (this->getOptimizationDirection() == storm::solver::OptimizationDirection::Maximize &&
+                            (currentScore > bestScore || (currentScore >= bestScore && currentOffset == previousOffset))) ) {
                     bestOffset = currentOffset;
                     bestScore = currentScore;
                 }
