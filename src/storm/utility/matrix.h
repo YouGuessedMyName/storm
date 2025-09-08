@@ -17,7 +17,7 @@ namespace matrix {
  * @param scheduler The scheduler to apply to the system.
  * @return A transition matrix that corresponds to all transitions of the given system that are selected by the given scheduler.
  */
-template<typename T>
+template<typename T> // TODO This needs to be improved please
 storm::storage::SparseMatrix<T> applyScheduler(storm::storage::SparseMatrix<T> const& transitionMatrix, storm::storage::Scheduler<T> const& scheduler) {
     storm::storage::SparseMatrixBuilder<T> matrixBuilder(transitionMatrix.getRowGroupCount(), transitionMatrix.getColumnCount());
 
