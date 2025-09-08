@@ -281,19 +281,11 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
     STORM_LOG_THROW(true, storm::exceptions::NotImplementedException,
         "Policy iteration is not yet implemented for LRA");
 
-    /* Map from state number (column number) to the index in the MEC/BSCC */
-    std::map<unsigned int, unsigned int> stateToMecIndexMap; // state -> index in mec
-    unsigned long mecIndex = 0;
-    for (const auto& key : mec | std::views::keys) {
-        stateToMecIndexMap[key] = mecIndex;
-        mecIndex++;
-    }
-
     /* Scheduler that will be improved over the course of the algorithm, picks a random state within the MEC for now
      * It maps states -> offsets which can be relative to the states or row groups (depends on the context).
      */
     auto scheduler = storm::storage::Scheduler<ValueType>(this->_transitionMatrix.getRowGroupCount());
-    for (int i = 0; i < mec.size(); i++) {
+    for (int i = 0; i < this->_transitionMatrix.getRowGroupCount(); i++) {
         scheduler.setChoice(0, i);
     }
 
@@ -306,6 +298,14 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
     auto stateSet = mec.getStateSet();
     for (auto s : stateSet) {
         scc.insert(s);
+    }
+
+    /* Map from state number (column number) to the index in the BSCC */
+    std::map<unsigned int, unsigned int> stateToBsccIndexMap; // state -> index in scc
+    unsigned long bsccIndex = 0;
+    for (const auto& key : scc.getStates()) {
+        stateToBsccIndexMap[key] = bsccIndex;
+        bsccIndex++;
     }
 
     /* The resulting gain */
@@ -342,14 +342,14 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
             for (auto succRowIndex : choices) {
                 auto succRow = this->_transitionMatrix.getRow(succRowIndex); // Get the row for this choice (i.e. the prob. dist. of succs.)
                 // Now take the weighted sum over the successor's bias
-                ValueType sum = storm::utility::zero<ValueType>(); // TODO ask if/how I should initialize this?
+                ValueType sum = storm::utility::zero<ValueType>();
                 cout << sum << endl;
                 for (auto succ : succRow) {
                     ValueType p = succ.getValue();
                     auto succCol = succ.getColumn();
                     //unsigned long mecInd = stateToMecIndexMap.at(static_cast<uint64_t>(succ.getColumn())); // might still need this.
-                    auto bias = biases.at(succCol);
-                    sum = sum + p * biases.at(succCol);
+                    auto bias = biases.at(stateToBsccIndexMap[succCol]); // TODO bug here crashes
+                    sum = sum + p * bias;
                     cout << bias << endl;
                 }
                 auto currentOffset = succRowIndex - stateRowIndex;
