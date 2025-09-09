@@ -284,6 +284,7 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
     /* Scheduler that will be improved over the course of the algorithm, picks a random state within the MEC for now
      * It maps states -> offsets which can be relative to the states or row groups (depends on the context).
      */
+    //auto oldSchedulerDebug = storm::storage::Scheduler<ValueType>(this->_transitionMatrix.getRowGroupCount());
     auto scheduler = storm::storage::Scheduler<ValueType>(this->_transitionMatrix.getRowGroupCount());
     for (int i = 0; i < this->_transitionMatrix.getRowGroupCount(); i++) {
         scheduler.setChoice(0, i);
@@ -310,9 +311,12 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
 
     /* The resulting gain */
     ValueType gain;
+    int n = 0;
 
     bool schedulerWasChanged = true;
     while (schedulerWasChanged) {
+        cout << n << " -----------------------------" << endl;
+        //scheduler.printToStream(cout);
         schedulerWasChanged = false;
         // Step 2 is already implemented for us.
         auto gainBias = helper.computeLraForBsccGainBias(env, stateRewardsGetter, actionRewardsGetter, scc);
@@ -329,7 +333,7 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
             storm::storage::FlatSet<unsigned long> choices = mec.getChoicesForState(state);
 
             auto previousOffset = scheduler.getChoice(state).getDeterministicChoice();
-            cout << state << endl;
+            //cout << state << endl;
 
             unsigned long bestOffset = 0;
             ValueType bestScore;
@@ -343,14 +347,13 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
                 auto succRow = this->_transitionMatrix.getRow(succRowIndex); // Get the row for this choice (i.e. the prob. dist. of succs.)
                 // Now take the weighted sum over the successor's bias
                 ValueType sum = storm::utility::zero<ValueType>();
-                cout << sum << endl;
+                // << sum << endl;
                 for (auto succ : succRow) {
                     ValueType p = succ.getValue();
                     auto succCol = succ.getColumn();
-                    //unsigned long mecInd = stateToMecIndexMap.at(static_cast<uint64_t>(succ.getColumn())); // might still need this.
-                    auto bias = biases.at(stateToBsccIndexMap[succCol]); // TODO bug here crashes
+                    auto bias = biases.at(stateToBsccIndexMap[succCol]);
                     sum = sum + p * bias;
-                    cout << bias << endl;
+                    //cout << bias << endl;
                 }
                 auto currentOffset = succRowIndex - stateRowIndex;
                 auto currentScore = actionRewardsGetter(currentOffset) + sum;
@@ -366,6 +369,7 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
             if (bestOffset != previousOffset) {
                 schedulerWasChanged = true;
                 scheduler.setChoice(bestOffset, state);
+                cout << state << " -> " << bestOffset << endl;
             }
         }
         // Create a new DTMC from the updated scheduler if necessary.
@@ -373,7 +377,7 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
             deterministicMatrix = storm::utility::matrix::applyScheduler<ValueType>(this->_transitionMatrix, scheduler); // TODO do I need to destroy the old matrix manually?
         }
     }
-    cout << scc.size() << endl;
+    //cout << scc.size() << endl;
     // We get here after the scheduler no longer changes.
     return gain;
 
