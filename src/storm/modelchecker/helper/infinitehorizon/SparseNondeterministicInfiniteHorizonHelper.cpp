@@ -270,6 +270,64 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
     return solver->getContinuousValue(k);
 }
 
+template<typename ValueType>
+pair<bool, storm::storage::Scheduler<ValueType>> SparseNondeterministicInfiniteHorizonHelper<ValueType>::biasImprovementStep(Environment const& env, ValueGetter const& stateRewardsGetter,
+                                                                                     ValueGetter const& actionRewardsGetter,
+                                                                                     storm::storage::MaximalEndComponent const& mec,
+                                                                                     storm::storage::Scheduler<ValueType> scheduler,
+                                                                                     std::map<unsigned int, ValueType> const& stateToBiasMap) {
+    /* Bias improvement (step 6). Go over every state and see if it could be improved.
+     * If it is improved, then update the scheduler and schedulerWasChanged.
+     */
+    bool schedulerWasChanged = false;
+    for (const unsigned long& state : mec.getStateSet()) {
+        // Implementing arg max myself, is there a better way to do this?
+        auto stateRowIndex = this->_transitionMatrix.getRowGroupIndices()[state];
+        storm::storage::FlatSet<unsigned long> choices = mec.getChoicesForState(state);
+
+        auto previousOffset = scheduler.getChoice(state).getDeterministicChoice();
+        //cout << state << endl;
+
+        unsigned long bestOffset = 0;
+        ValueType bestScore;
+        if (this->getOptimizationDirection() == storm::solver::OptimizationDirection::Minimize) {
+            bestScore = storm::utility::infinity<ValueType>();
+        } else {
+            bestScore = - storm::utility::infinity<ValueType>();
+        }
+
+        for (auto succRowIndex : choices) {
+            auto succRow = this->_transitionMatrix.getRow(succRowIndex); // Get the row for this choice (i.e. the prob. dist. of succs.)
+            // Now take the weighted sum over the successor's bias
+            ValueType sum = storm::utility::zero<ValueType>();
+            // << sum << endl;
+            for (auto succ : succRow) {
+                ValueType p = succ.getValue();
+                auto succCol = succ.getColumn();
+                auto bias = stateToBiasMap.at(succCol);
+                sum = sum + p * bias;
+                //cout << bias << endl;
+            }
+            auto currentOffset = succRowIndex - stateRowIndex;
+            auto currentScore = actionRewardsGetter(currentOffset) + sum;
+            // Save the best choice and score, with preference for the previous choice if possible.
+            if (    (this->getOptimizationDirection() == storm::solver::OptimizationDirection::Minimize &&
+                        (currentScore < bestScore || (currentScore <= bestScore && currentOffset == previousOffset))) ||
+                    (this->getOptimizationDirection() == storm::solver::OptimizationDirection::Maximize &&
+                        (currentScore > bestScore || (currentScore >= bestScore && currentOffset == previousOffset))) ) {
+                bestOffset = currentOffset;
+                bestScore = currentScore;
+            }
+        }
+        if (bestOffset != previousOffset) {
+            schedulerWasChanged = true;
+            scheduler.setChoice(bestOffset, state);
+            cout << state << " -> " << bestOffset << endl;
+        }
+    }
+    return std::pair<bool, storm::storage::Scheduler<ValueType>>(schedulerWasChanged, scheduler);
+}
+
 
 /*! HERE
  *
@@ -292,7 +350,10 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
 
     /* Matrix that will be used for the induced DTMCs */
     auto deterministicMatrix = storm::utility::matrix::applyScheduler(this->_transitionMatrix, scheduler); // The induced DTMC from the scheduler
-    SparseDeterministicInfiniteHorizonHelper<ValueType> helper(deterministicMatrix); // Initiate the helper so that we can use computeLraForBsccGainBias (step 2)
+    std::unique_ptr<SparseDeterministicInfiniteHorizonHelper<ValueType>> helper;
+    helper = std::make_unique<SparseDeterministicInfiniteHorizonHelper<ValueType>>(deterministicMatrix); // Initiate the helper so that we can use computeLraForBsccGainBias (step 2)
+
+    //SparseDeterministicInfiniteHorizonHelper<ValueType> helper(deterministicMatrix);
 
     /* SSC that corresponds to the MEC in the induced DTMCs */
     storm::storage::StronglyConnectedComponent scc;
@@ -301,88 +362,43 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
         scc.insert(s);
     }
 
-    /* Map from state number (column number) to the index in the BSCC */
-    std::map<unsigned int, unsigned int> stateToBsccIndexMap; // state -> index in scc
+    /* Map from state number (column number) to the index in the MEC */
+    std::map<unsigned int, unsigned int> stateMecIndexMap; // state -> index in scc
     unsigned long bsccIndex = 0;
-    for (const auto& key : scc.getStates()) {
-        stateToBsccIndexMap[key] = bsccIndex;
+    for (const auto& key : mec.getStateSet()) {
+        stateMecIndexMap[key] = bsccIndex;
         bsccIndex++;
     }
 
+    std::map<unsigned int, ValueType> stateToBiasMap;
     /* The resulting gain */
     ValueType gain;
-    int n = 0;
 
-    bool schedulerWasChanged = true;
-    while (schedulerWasChanged) {
+    int n = 0;
+    cout << endl;
+    while (true) {
         cout << n << " -----------------------------" << endl;
         //scheduler.printToStream(cout);
-        schedulerWasChanged = false;
-        // Step 2 is already implemented for us.
-        auto gainBias = helper.computeLraForBsccGainBias(env, stateRewardsGetter, actionRewardsGetter, scc);
-        gain = gainBias.first; // Since we are only looking at a single MEC, the gain will be the same everywhere, hence it is one value.
-        std::vector<ValueType> biases = gainBias.second;
-        // TODO I'm pretty sure that step 3-4-5 can be skipped since the gain is the same for the whole MEC so it would never be possible to change the scheduler.
 
-        /* Bias improvement (step 6). Go over every state and see if it could be improved.
-         * If it is improved, then update the scheduler and schedulerWasChanged.
-         */
-        for (const unsigned long& state : mec.getStateSet()) {
-            // Implementing arg max myself, is there a better way to do this?
-            auto stateRowIndex = this->_transitionMatrix.getRowGroupIndices()[state];
-            storm::storage::FlatSet<unsigned long> choices = mec.getChoicesForState(state);
+        // TODO Step 2 is already implemented for us. nope...
+        auto [gain, biases] = helper->computeLraForBsccGainBias(env, stateRewardsGetter, actionRewardsGetter, scc);
+        // TODO Implement step 3-4-5
 
-            auto previousOffset = scheduler.getChoice(state).getDeterministicChoice();
-            //cout << state << endl;
-
-            unsigned long bestOffset = 0;
-            ValueType bestScore;
-            if (this->getOptimizationDirection() == storm::solver::OptimizationDirection::Minimize) {
-                bestScore = storm::utility::infinity<ValueType>();
-            } else {
-                bestScore = - storm::utility::infinity<ValueType>();
-            }
-
-            for (auto succRowIndex : choices) {
-                auto succRow = this->_transitionMatrix.getRow(succRowIndex); // Get the row for this choice (i.e. the prob. dist. of succs.)
-                // Now take the weighted sum over the successor's bias
-                ValueType sum = storm::utility::zero<ValueType>();
-                // << sum << endl;
-                for (auto succ : succRow) {
-                    ValueType p = succ.getValue();
-                    auto succCol = succ.getColumn();
-                    auto bias = biases.at(stateToBsccIndexMap[succCol]);
-                    sum = sum + p * bias;
-                    //cout << bias << endl;
-                }
-                auto currentOffset = succRowIndex - stateRowIndex;
-                auto currentScore = actionRewardsGetter(currentOffset) + sum;
-                // Save the best choice and score, with preference for the previous choice if possible.
-                if (    (this->getOptimizationDirection() == storm::solver::OptimizationDirection::Minimize &&
-                            (currentScore < bestScore || (currentScore <= bestScore && currentOffset == previousOffset))) ||
-                        (this->getOptimizationDirection() == storm::solver::OptimizationDirection::Maximize &&
-                            (currentScore > bestScore || (currentScore >= bestScore && currentOffset == previousOffset))) ) {
-                    bestOffset = currentOffset;
-                    bestScore = currentScore;
-                }
-            }
-            if (bestOffset != previousOffset) {
-                schedulerWasChanged = true;
-                scheduler.setChoice(bestOffset, state);
-                cout << state << " -> " << bestOffset << endl;
-            }
+        // step 6
+        for (const auto& [state, mecIndex] : stateMecIndexMap) {
+            stateToBiasMap[state] = biases[mecIndex];
         }
-        // Create a new DTMC from the updated scheduler if necessary.
-        if (schedulerWasChanged) {
+
+        auto [schedulerChanged, newScheduler] = this->biasImprovementStep(env, stateRewardsGetter, actionRewardsGetter, mec, scheduler, stateToBiasMap);
+        if (schedulerChanged) {
+            scheduler = newScheduler;
             deterministicMatrix = storm::utility::matrix::applyScheduler<ValueType>(this->_transitionMatrix, scheduler); // TODO do I need to destroy the old matrix manually?
+            helper = std::make_unique<SparseDeterministicInfiniteHorizonHelper<ValueType>>(deterministicMatrix); // TODO this may be unnecessary, investigate later!
+        } else {
+            return gain;
         }
+        n++;
     }
-    //cout << scc.size() << endl;
-    // We get here after the scheduler no longer changes.
-    return gain;
-
-    // Temporary, until I figure out how to test properly lol
-    //return computeLraForMecLp(env, stateRewardsGetter, actionRewardsGetter, mec);
 }
 
 /*!

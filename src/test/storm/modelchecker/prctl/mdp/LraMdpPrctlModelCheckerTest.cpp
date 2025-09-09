@@ -54,13 +54,14 @@ class SparseValueTypeLinearProgrammingEnvironment {
 
 class SparseValueTypePolicyIterationEnvironment {
 public:
-    static const bool isExact = false;
-    typedef double ValueType;
+    static const bool isExact = true;
+    typedef storm::RationalNumber ValueType;
     typedef storm::models::sparse::Mdp<ValueType> ModelType;
     static storm::Environment createEnvironment() {
         storm::Environment env;
         env.solver().lra().setNondetLraMethod(storm::solver::LraMethod::PolicyIteration);
         env.solver().lra().setPrecision(storm::utility::convertNumber<storm::RationalNumber>(1e-10));
+        env.solver().setForceExact(true);
         return env;
     }
 };

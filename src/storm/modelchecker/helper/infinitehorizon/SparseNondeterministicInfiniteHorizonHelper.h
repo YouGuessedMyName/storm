@@ -105,6 +105,12 @@ class SparseNondeterministicInfiniteHorizonHelper : public SparseInfiniteHorizon
      * @post if scheduler production is enabled getProducedOptimalChoices() contains choices for all input model states which yield the returned LRA values.
      */
     virtual std::vector<ValueType> buildAndSolveSsp(Environment const& env, std::vector<ValueType> const& mecLraValues) override;
+
+    std::pair<bool, storm::storage::Scheduler<ValueType>> biasImprovementStep(Environment const& env, ValueGetter const& stateRewardsGetter,
+                                                                                     ValueGetter const& actionRewardsGetter,
+                                                                                     storm::storage::MaximalEndComponent const& mec,
+                                                                                     storm::storage::Scheduler<ValueType> scheduler,
+                                                                                     std::map<unsigned int, ValueType> const& stateToBiasMap);
 };
 
 }  // namespace helper
