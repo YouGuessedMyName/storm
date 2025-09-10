@@ -275,7 +275,7 @@ pair<bool, storm::storage::Scheduler<ValueType>> SparseNondeterministicInfiniteH
                                                                                      ValueGetter const& actionRewardsGetter,
                                                                                      storm::storage::MaximalEndComponent const& mec,
                                                                                      storm::storage::Scheduler<ValueType> scheduler,
-                                                                                     std::map<unsigned int, ValueType> const& stateToBiasMap) {
+                                                                                     std::map<unsigned long, ValueType> const& stateToBiasMap) {
     /* Bias improvement (step 6). Go over every state and see if it could be improved.
      * If it is improved, then update the scheduler and schedulerWasChanged.
      */
@@ -322,7 +322,7 @@ pair<bool, storm::storage::Scheduler<ValueType>> SparseNondeterministicInfiniteH
         if (bestOffset != previousOffset) {
             schedulerWasChanged = true;
             scheduler.setChoice(bestOffset, state);
-            cout << state << " -> " << bestOffset << endl;
+            cout << state << " -> " << bestOffset << endl; // TODO remove, for easier debugging.
         }
     }
     return std::pair<bool, storm::storage::Scheduler<ValueType>>(schedulerWasChanged, scheduler);
@@ -336,52 +336,34 @@ template<typename ValueType>
 ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForMecPi(Environment const& env, ValueGetter const& stateRewardsGetter,
                                                                                      ValueGetter const& actionRewardsGetter,
                                                                                      storm::storage::MaximalEndComponent const& mec) {
-    STORM_LOG_THROW(true, storm::exceptions::NotImplementedException,
-        "Policy iteration is not yet implemented for LRA");
-
     /* Scheduler that will be improved over the course of the algorithm, picks a random state within the MEC for now
-     * It maps states -> offsets which can be relative to the states or row groups (depends on the context).
-     */
-    //auto oldSchedulerDebug = storm::storage::Scheduler<ValueType>(this->_transitionMatrix.getRowGroupCount());
+      It maps states -> offsets which can be relative to the states or row groups (depends on the context). */
     auto scheduler = storm::storage::Scheduler<ValueType>(this->_transitionMatrix.getRowGroupCount());
-    for (int i = 0; i < this->_transitionMatrix.getRowGroupCount(); i++) {
-        scheduler.setChoice(0, i);
-    }
+    for (int i = 0; i < this->_transitionMatrix.getRowGroupCount(); i++) { scheduler.setChoice(0, i); }
 
-    /* Matrix that will be used for the induced DTMCs */
-    auto deterministicMatrix = storm::utility::matrix::applyScheduler(this->_transitionMatrix, scheduler); // The induced DTMC from the scheduler
+    /* Matrix that will be used for the induced DTMCs and its helper */
+    auto mecBitVector = storm::storage::BitVector(this->_transitionMatrix.getRowGroupCount());
+    for (const auto& state : mec.getStateSet()) { mecBitVector.set(state); }
+    auto deterministicMatrix = storm::utility::matrix::applyScheduler(this->_transitionMatrix, scheduler).getSubmatrix(true, mecBitVector, mecBitVector);//.restrictRows(mecBitVector); // We only keep the rows from the MEC, that makes everything so much easier.
     std::unique_ptr<SparseDeterministicInfiniteHorizonHelper<ValueType>> helper;
     helper = std::make_unique<SparseDeterministicInfiniteHorizonHelper<ValueType>>(deterministicMatrix); // Initiate the helper so that we can use computeLraForBsccGainBias (step 2)
 
-    //SparseDeterministicInfiniteHorizonHelper<ValueType> helper(deterministicMatrix);
-
     /* SSC that corresponds to the MEC in the induced DTMCs */
-    storm::storage::StronglyConnectedComponent scc;
-    auto stateSet = mec.getStateSet();
-    for (auto s : stateSet) {
-        scc.insert(s);
-    }
+    // storm::storage::StronglyConnectedComponent scc;
+    // auto stateSet = mec.getStateSet();
+    // for (auto s : stateSet) { scc.insert(s); }
 
-    /* Map from state number (column number) to the index in the MEC */
-    std::map<unsigned int, unsigned int> stateMecIndexMap; // state -> index in scc
+    /* Map from state number (column number) -> bias */
+    std::map<unsigned long, ValueType> stateToBiasMap;
+    std::map<unsigned long, unsigned long> stateMecIndexMap; // state -> index in scc. Only used for calculating stateToBiasMap.
     unsigned long bsccIndex = 0;
-    for (const auto& key : mec.getStateSet()) {
-        stateMecIndexMap[key] = bsccIndex;
-        bsccIndex++;
-    }
+    for (const auto& key : mec.getStateSet()) { stateMecIndexMap[key] = bsccIndex; bsccIndex++; }
 
-    std::map<unsigned int, ValueType> stateToBiasMap;
-    /* The resulting gain */
-    ValueType gain;
-
-    int n = 0;
-    cout << endl;
+    int n = 0; cout << endl;
     while (true) {
         cout << n << " -----------------------------" << endl;
-        //scheduler.printToStream(cout);
 
-        // TODO Step 2 is already implemented for us. nope...
-        auto [gain, biases] = helper->computeLraForBsccGainBias(env, stateRewardsGetter, actionRewardsGetter, scc);
+        auto [gain, biases] = helper->computeLraGainBias(env, stateRewardsGetter, actionRewardsGetter, mec.getStateSet());
         // TODO Implement step 3-4-5
 
         // step 6

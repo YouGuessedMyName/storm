@@ -246,6 +246,74 @@ std::pair<ValueType, std::vector<ValueType>> SparseDeterministicInfiniteHorizonH
 }
 
 template<typename ValueType>
+bool sccDecompositionContainsScc(storage::StronglyConnectedComponent scc, storage::StronglyConnectedComponentDecomposition<ValueType> sccDecomp) {
+    for (const auto& scc_ : sccDecomp) {
+        if (scc == scc_) { return true; }
+    }
+    return false;
+}
+
+template<typename ValueType>
+std::pair<ValueType, std::vector<ValueType>> SparseDeterministicInfiniteHorizonHelper<ValueType>::computeLraGainBias(
+    Environment const& env, ValueGetter const& stateValuesGetter, ValueGetter const& actionValuesGetter,
+    storm::storage::FlatSet<unsigned long> const& stateSet) {
+
+    auto gains = std::map<unsigned long, ValueType>();
+    // Maps gain to state to probability
+    auto p = std::map<ValueType, std::map<unsigned long, ValueType>>();
+
+    storm::storage::StronglyConnectedComponentDecomposition<ValueType> bsccDecomp(this->_transitionMatrix,
+                                                                             storm::storage::StronglyConnectedComponentDecompositionOptions().onlyBottomSccs().forceTopologicalSort());
+    storm::storage::StronglyConnectedComponentDecomposition<ValueType> oldSccDecomp(this->_transitionMatrix, storm::storage::StronglyConnectedComponentDecompositionOptions().forceTopologicalSort());
+    auto m = oldSccDecomp.size() - bsccDecomp.size();
+    std::vector<storage::StronglyConnectedComponent> sccDecompNoBscc(0);
+    for (auto scc : oldSccDecomp) {
+        if (! sccDecompositionContainsScc(scc, bsccDecomp)) { sccDecompNoBscc.push_back(scc); }
+    }
+
+    // S_lt is our state set that keeps expanding, see step 6.
+    storm::storage::FlatSet<unsigned long> S_lt;
+    for (auto bscc : bsccDecomp) {
+        for (auto state : bscc.getStates()) { S_lt.insert(state); }
+    }
+
+    for (storage::StronglyConnectedComponent bscc : std::ranges::reverse_view(bsccDecomp)) {
+        auto [bsccGain, biases] = this->computeLraForBsccGainBias(env, stateValuesGetter, actionValuesGetter, bscc); // step 3
+        for (auto state : bscc) { gains[state] = bsccGain; } // step 4
+    }
+
+    for (unsigned long i = m; i >= 1; --i) { // Note that we iterate in reverse, but we need this since in the paper S_lt is in reverse.
+        auto Si = sccDecompNoBscc[i].getStates();
+        for (auto s : Si) { S_lt.insert(s); } // Step 6
+
+        // Step 7-8
+        auto succgGain = storm::storage::FlatSet<ValueType>();
+        auto succgStates = storm::storage::FlatSet<unsigned long>();
+        for (auto s : Si) {
+            for (const auto& entry : this->_transitionMatrix.getRow(s)) {
+                if (entry.getValue() != storm::utility::zero<ValueType>()) {
+                    succgGain.insert_unique(gains[entry.getColumn()]);
+                    succgStates.insert_unique(entry.getColumn());
+                }
+            }
+        }
+        // Step 9
+        for (auto s : Si) {
+            // TODO stuff with equation systems. Step 9 warrants a separate method.
+
+            // Step 10
+            for (auto s : Si) {
+                for (ValueType g : succgGain) {
+                    gains[s] += p[g][s] * g;
+                }
+            }
+
+            // TODO step 11 equations. Warrants a separate method too.
+        }
+    }
+}
+
+template<typename ValueType>
 std::vector<ValueType> SparseDeterministicInfiniteHorizonHelper<ValueType>::computeSteadyStateDistrForBscc(
     Environment const& env, storm::storage::StronglyConnectedComponent const& bscc) {
     // We catch the (easy) case where the BSCC is a singleton.

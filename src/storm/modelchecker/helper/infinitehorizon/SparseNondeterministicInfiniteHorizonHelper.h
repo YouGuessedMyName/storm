@@ -110,7 +110,7 @@ class SparseNondeterministicInfiniteHorizonHelper : public SparseInfiniteHorizon
                                                                                      ValueGetter const& actionRewardsGetter,
                                                                                      storm::storage::MaximalEndComponent const& mec,
                                                                                      storm::storage::Scheduler<ValueType> scheduler,
-                                                                                     std::map<unsigned int, ValueType> const& stateToBiasMap);
+                                                                                     std::map<unsigned long, ValueType> const& stateToBiasMap);
 };
 
 }  // namespace helper

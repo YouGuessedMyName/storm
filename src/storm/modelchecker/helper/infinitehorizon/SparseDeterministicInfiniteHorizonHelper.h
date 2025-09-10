@@ -60,6 +60,11 @@ class SparseDeterministicInfiniteHorizonHelper : public SparseInfiniteHorizonHel
     std::pair<ValueType, std::vector<ValueType>> computeLraForBsccGainBias(Environment const& env, ValueGetter const& stateValuesGetter,
                                                                                ValueGetter const& actionValuesGetter,
                                                                                storm::storage::StronglyConnectedComponent const& bscc);
+    // TODO documentation.
+    std::pair<ValueType, std::vector<ValueType>> computeLraGainBias(
+        Environment const& env, ValueGetter const& stateValuesGetter, ValueGetter const& actionValuesGetter,
+        storm::storage::FlatSet<unsigned long> const& stateSet);
+
    protected:
     virtual void createDecomposition() override;
 
