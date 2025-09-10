@@ -271,7 +271,7 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
 }
 
 template<typename ValueType>
-pair<bool, storm::storage::Scheduler<ValueType>> SparseNondeterministicInfiniteHorizonHelper<ValueType>::biasImprovementStep(Environment const& env, ValueGetter const& stateRewardsGetter,
+pair<bool, storm::storage::Scheduler<ValueType>> SparseNondeterministicInfiniteHorizonHelper<ValueType>::biasImprovementStep(Environment const& env, ValueGetter const& stateRewardsGetter, // TODO ask if I should use stateRewardsGetter here?
                                                                                      ValueGetter const& actionRewardsGetter,
                                                                                      storm::storage::MaximalEndComponent const& mec,
                                                                                      storm::storage::Scheduler<ValueType> scheduler,
@@ -305,7 +305,7 @@ pair<bool, storm::storage::Scheduler<ValueType>> SparseNondeterministicInfiniteH
                 ValueType p = succ.getValue();
                 auto succCol = succ.getColumn();
                 auto bias = stateToBiasMap.at(succCol);
-                sum = sum + p * bias;
+                sum = sum + p * bias + stateRewardsGetter(succCol); // TODO is this the correct input to stateRewardsGetter?
                 //cout << bias << endl;
             }
             auto currentOffset = succRowIndex - stateRowIndex;
@@ -343,9 +343,20 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
 
     /* Matrix that will be used for the induced DTMCs and its helper */
     auto mecBitVector = storm::storage::BitVector(this->_transitionMatrix.getRowGroupCount());
+    std::vector<uint64_t> mecStatesVector(mec.getStateSet().begin(), mec.getStateSet().end());
+    std::sort(mecStatesVector.begin(), mecStatesVector.end());
+
     for (const auto& state : mec.getStateSet()) { mecBitVector.set(state); }
     auto deterministicMatrix = storm::utility::matrix::applyScheduler(this->_transitionMatrix, scheduler).getSubmatrix(true, mecBitVector, mecBitVector);//.restrictRows(mecBitVector); // We only keep the rows from the MEC, that makes everything so much easier.
     std::unique_ptr<SparseDeterministicInfiniteHorizonHelper<ValueType>> helper;
+    // Modified reward getters for the restricted DTMC with only the states that were in the MEC.
+    ValueGetter inducedStateRewardsGetter = [&stateRewardsGetter, &mecStatesVector](uint64_t state) -> ValueType {
+        return stateRewardsGetter(mecStatesVector[state]);
+    };
+    ValueGetter inducedActionRewardsGetter = [&actionRewardsGetter, &mecStatesVector](uint64_t state) -> ValueType {
+        return actionRewardsGetter(mecStatesVector[state]);
+    };
+
     helper = std::make_unique<SparseDeterministicInfiniteHorizonHelper<ValueType>>(deterministicMatrix); // Initiate the helper so that we can use computeLraForBsccGainBias (step 2)
 
     /* SSC that corresponds to the MEC in the induced DTMCs */
@@ -363,7 +374,7 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
     while (true) {
         cout << n << " -----------------------------" << endl;
 
-        auto [gain, biases] = helper->computeLraGainBias(env, stateRewardsGetter, actionRewardsGetter, mec.getStateSet());
+        auto [gain, biases] = helper->computeLraGainBias(env, inducedStateRewardsGetter, inducedActionRewardsGetter);
         // TODO Implement step 3-4-5
 
         // step 6
@@ -377,7 +388,8 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
             deterministicMatrix = storm::utility::matrix::applyScheduler<ValueType>(this->_transitionMatrix, scheduler); // TODO do I need to destroy the old matrix manually?
             helper = std::make_unique<SparseDeterministicInfiniteHorizonHelper<ValueType>>(deterministicMatrix); // TODO this may be unnecessary, investigate later!
         } else {
-            return gain;
+            return gain[0]; // We just return the first one since they should all be the same in a MEC.
+            // TODO when debugging, we should check if this actually works.
         }
         n++;
     }

@@ -254,11 +254,11 @@ bool sccDecompositionContainsScc(storage::StronglyConnectedComponent scc, storag
 }
 
 template<typename ValueType>
-std::pair<ValueType, std::vector<ValueType>> SparseDeterministicInfiniteHorizonHelper<ValueType>::computeLraGainBias(
-    Environment const& env, ValueGetter const& stateValuesGetter, ValueGetter const& actionValuesGetter,
-    storm::storage::FlatSet<unsigned long> const& stateSet) {
+std::pair<std::vector<ValueType>, std::vector<ValueType>> SparseDeterministicInfiniteHorizonHelper<ValueType>::computeLraGainBias(
+    Environment const& env, ValueGetter const& stateValuesGetter, ValueGetter const& actionValuesGetter) {
 
-    auto gains = std::map<unsigned long, ValueType>();
+    auto gains = std::vector<ValueType>();
+    auto biases = std::vector<ValueType>();
     // Maps gain to state to probability
     auto p = std::map<ValueType, std::map<unsigned long, ValueType>>();
 
@@ -278,11 +278,11 @@ std::pair<ValueType, std::vector<ValueType>> SparseDeterministicInfiniteHorizonH
     }
 
     for (storage::StronglyConnectedComponent bscc : std::ranges::reverse_view(bsccDecomp)) {
-        auto [bsccGain, biases] = this->computeLraForBsccGainBias(env, stateValuesGetter, actionValuesGetter, bscc); // step 3
+        auto [bsccGain, biases] = this->computeLraForBsccGainBias(env, stateValuesGetter, actionValuesGetter, bscc);
         for (auto state : bscc) { gains[state] = bsccGain; } // step 4
     }
 
-    for (unsigned long i = m; i >= 1; --i) { // Note that we iterate in reverse, but we need this since in the paper S_lt is in reverse.
+    for (unsigned long i = m; i >= 1; --i) { // Note that we iterate in reverse, but we need this, since in the paper S_lt is in reverse.
         auto Si = sccDecompNoBscc[i].getStates();
         for (auto s : Si) { S_lt.insert(s); } // Step 6
 
@@ -297,20 +297,19 @@ std::pair<ValueType, std::vector<ValueType>> SparseDeterministicInfiniteHorizonH
                 }
             }
         }
-        // Step 9
+
+        p = this->computeGainProbabilities(env, p, Si); // Step 9 TODO implement
+
+        // Step 10
         for (auto s : Si) {
-            // TODO stuff with equation systems. Step 9 warrants a separate method.
-
-            // Step 10
-            for (auto s : Si) {
-                for (ValueType g : succgGain) {
-                    gains[s] += p[g][s] * g;
-                }
+            for (ValueType g : succgGain) {
+                gains[s] += p[g][s] * g;
             }
-
-            // TODO step 11 equations. Warrants a separate method too.
         }
+
+        biases = this->computeBiases(env, stateValuesGetter, actionValuesGetter, biases, Si); // Step 11 TODO implement
     }
+    return std::pair<std::vector<ValueType>, std::vector<ValueType>>(gains, biases);
 }
 
 template<typename ValueType>

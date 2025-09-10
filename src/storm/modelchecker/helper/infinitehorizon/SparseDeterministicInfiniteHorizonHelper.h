@@ -61,9 +61,8 @@ class SparseDeterministicInfiniteHorizonHelper : public SparseInfiniteHorizonHel
                                                                                ValueGetter const& actionValuesGetter,
                                                                                storm::storage::StronglyConnectedComponent const& bscc);
     // TODO documentation.
-    std::pair<ValueType, std::vector<ValueType>> computeLraGainBias(
-        Environment const& env, ValueGetter const& stateValuesGetter, ValueGetter const& actionValuesGetter,
-        storm::storage::FlatSet<unsigned long> const& stateSet);
+    std::pair<std::vector<ValueType>, std::vector<ValueType>> computeLraGainBias(
+        Environment const& env, ValueGetter const& stateValuesGetter, ValueGetter const& actionValuesGetter);
 
    protected:
     virtual void createDecomposition() override;
@@ -103,10 +102,14 @@ class SparseDeterministicInfiniteHorizonHelper : public SparseInfiniteHorizonHel
                                                                                                     storm::storage::BitVector const& statesNotInComponent,
                                                                                                     bool asEquationSystem);
 
+    std::map<ValueType, std::map<unsigned long, ValueType>> computeGainProbabilities(Environment const& env, std::map<ValueType, std::map<unsigned long, ValueType>> p, storm::storage::FlatSet<unsigned long> stateSet);
+
+    std::vector<ValueType> computeBiases(Environment const& env, ValueGetter const& stateValuesGetter, ValueGetter const& actionValuesGetter, std::vector<ValueType> biases, storm::storage::FlatSet<unsigned long> stateSet);
+
     /*!
      * @return Lra values for each state
      */
-    virtual std::vector<ValueType> buildAndSolveSsp(Environment const& env, std::vector<ValueType> const& mecLraValues) override;
+    virtual std::vector<ValueType> buildAndSolveSsp(Environment const& env, std::vector<ValueType> const& componentLraValues);
 };
 
 }  // namespace helper
