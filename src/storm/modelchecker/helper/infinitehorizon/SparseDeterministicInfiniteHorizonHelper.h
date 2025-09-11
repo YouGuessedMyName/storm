@@ -102,9 +102,9 @@ class SparseDeterministicInfiniteHorizonHelper : public SparseInfiniteHorizonHel
                                                                                                     storm::storage::BitVector const& statesNotInComponent,
                                                                                                     bool asEquationSystem);
 
-    std::map<ValueType, std::map<unsigned long, ValueType>> computeGainProbabilities(Environment const& env, std::map<ValueType, std::map<unsigned long, ValueType>> p, storm::storage::FlatSet<unsigned long> stateSet);
+    std::map<ValueType, std::map<unsigned long, ValueType>> computeGainProbabilities(Environment const& env, std::map<ValueType, std::map<unsigned long, ValueType>> p, storm::storage::StronglyConnectedComponent Si, ValueType g, std::map<ValueType, storm::storage::FlatSet<uint64_t>> succgStates);
 
-    std::vector<ValueType> computeBiases(Environment const& env, ValueGetter const& stateValuesGetter, ValueGetter const& actionValuesGetter, std::vector<ValueType> biases, storm::storage::FlatSet<unsigned long> stateSet);
+    std::vector<ValueType> computeBiases(Environment const& env, ValueGetter const& stateValuesGetter, ValueGetter const& actionValuesGetter, std::vector<ValueType> biases, storm::storage::StronglyConnectedComponent Si, storm::storage::FlatSet<unsigned long> S_lt, std::vector<ValueType> gains);
 
     /*!
      * @return Lra values for each state

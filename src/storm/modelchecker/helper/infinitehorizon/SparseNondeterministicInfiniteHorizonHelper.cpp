@@ -328,6 +328,57 @@ pair<bool, storm::storage::Scheduler<ValueType>> SparseNondeterministicInfiniteH
     return std::pair<bool, storm::storage::Scheduler<ValueType>>(schedulerWasChanged, scheduler);
 }
 
+template<typename ValueType>
+pair<bool, storm::storage::Scheduler<ValueType>> SparseNondeterministicInfiniteHorizonHelper<ValueType>::gainImprovementStep(Environment const& env, storm::storage::Scheduler<ValueType> scheduler,
+        vector<ValueType> gains, storm::storage::MaximalEndComponent const& mec) {
+    bool schedulerWasChanged = false;
+    for (const unsigned long& state : mec.getStateSet()) {
+        auto stateRowIndex = this->_transitionMatrix.getRowGroupIndices()[state];
+        storm::storage::FlatSet<unsigned long> choices = mec.getChoicesForState(state);
+
+        auto previousOffset = scheduler.getChoice(state).getDeterministicChoice();
+        //cout << state << endl;
+
+        unsigned long bestOffset = 0;
+        ValueType bestScore;
+        if (this->getOptimizationDirection() == storm::solver::OptimizationDirection::Minimize) {
+            bestScore = storm::utility::infinity<ValueType>();
+        } else {
+            bestScore = - storm::utility::infinity<ValueType>();
+        }
+
+        for (auto succRowIndex : choices) {
+            auto succRow = this->_transitionMatrix.getRow(succRowIndex); // Get the row for this choice (i.e. the prob. dist. of succs.)
+            // Now take the weighted sum over the successor's bias
+            ValueType sum = storm::utility::zero<ValueType>();
+            // << sum << endl;
+            for (auto succ : succRow) {
+                ValueType p = succ.getValue();
+                auto succCol = succ.getColumn();
+                auto gain = gains.at(succCol);
+                sum = sum + p * gain; // TODO is this the correct input to stateRewardsGetter?
+                //cout << bias << endl;
+            }
+            auto currentOffset = succRowIndex - stateRowIndex;
+            auto currentScore = sum;
+            // Save the best choice and score, with preference for the previous choice if possible.
+            if (    (this->getOptimizationDirection() == storm::solver::OptimizationDirection::Minimize &&
+                        (currentScore < bestScore || (currentScore <= bestScore && currentOffset == previousOffset))) ||
+                    (this->getOptimizationDirection() == storm::solver::OptimizationDirection::Maximize &&
+                        (currentScore > bestScore || (currentScore >= bestScore && currentOffset == previousOffset))) ) {
+                bestOffset = currentOffset;
+                bestScore = currentScore;
+                        }
+        }
+        if (bestOffset != previousOffset) {
+            schedulerWasChanged = true;
+            scheduler.setChoice(bestOffset, state);
+            cout << state << " -> " << bestOffset << endl; // TODO remove, for easier debugging.
+        }
+    }
+    return std::pair<bool, storm::storage::Scheduler<ValueType>>(schedulerWasChanged, scheduler);
+}
+
 
 /*! HERE
  *
@@ -374,21 +425,26 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
     while (true) {
         cout << n << " -----------------------------" << endl;
 
-        auto [gain, biases] = helper->computeLraGainBias(env, inducedStateRewardsGetter, inducedActionRewardsGetter);
-        // TODO Implement step 3-4-5
+        auto [gains, biases] = helper->computeLraGainBias(env, inducedStateRewardsGetter, inducedActionRewardsGetter);
+        auto [schedulerChangedGain, newSchedulerGain] = this->gainImprovementStep(env, scheduler, gains, mec); // Step 3
+        if (schedulerChangedGain) { // Step 4-5
+            scheduler = newSchedulerGain;
+            deterministicMatrix = storm::utility::matrix::applyScheduler<ValueType>(this->_transitionMatrix, scheduler); // TODO do I need to destroy the old matrix manually?
+            helper = std::make_unique<SparseDeterministicInfiniteHorizonHelper<ValueType>>(deterministicMatrix); // TODO this may be unnecessary, investigate later!
+            n++;
+            continue;
+        }
 
-        // step 6
         for (const auto& [state, mecIndex] : stateMecIndexMap) {
             stateToBiasMap[state] = biases[mecIndex];
         }
-
-        auto [schedulerChanged, newScheduler] = this->biasImprovementStep(env, stateRewardsGetter, actionRewardsGetter, mec, scheduler, stateToBiasMap);
+        auto [schedulerChanged, newScheduler] = this->biasImprovementStep(env, stateRewardsGetter, actionRewardsGetter, mec, scheduler, stateToBiasMap); // STep 6
         if (schedulerChanged) {
             scheduler = newScheduler;
             deterministicMatrix = storm::utility::matrix::applyScheduler<ValueType>(this->_transitionMatrix, scheduler); // TODO do I need to destroy the old matrix manually?
             helper = std::make_unique<SparseDeterministicInfiniteHorizonHelper<ValueType>>(deterministicMatrix); // TODO this may be unnecessary, investigate later!
         } else {
-            return gain[0]; // We just return the first one since they should all be the same in a MEC.
+            return gains[0]; // We just return the first one since they should all be the same in a MEC.
             // TODO when debugging, we should check if this actually works.
         }
         n++;

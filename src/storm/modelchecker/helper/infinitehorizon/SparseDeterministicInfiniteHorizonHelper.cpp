@@ -245,6 +245,141 @@ std::pair<ValueType, std::vector<ValueType>> SparseDeterministicInfiniteHorizonH
     return std::pair<ValueType, std::vector<ValueType>>(std::move(gain), std::move(eqSysSol));
 }
 
+template <typename ValueType>
+std::map<ValueType, std::map<unsigned long, ValueType>> SparseDeterministicInfiniteHorizonHelper<ValueType>::computeGainProbabilities(Environment const& env,
+    std::map<ValueType, std::map<unsigned long, ValueType>> p, storm::storage::StronglyConnectedComponent scc, ValueType g, std::map<ValueType, storm::storage::FlatSet<uint64_t>> succgStates) {
+    // we want that the returned vector is sorted as the bscc. So let's assert that the bscc is sorted ascendingly.
+    STORM_LOG_ASSERT(std::is_sorted(scc.begin(), scc.end()), "Expected that sccs are sorted.");
+
+    // Get a mapping from global state indices to local ones.
+    std::unordered_map<uint64_t, uint64_t> toLocalIndexMap;
+    uint64_t localIndex = 0;
+    for (auto const& globalIndex : scc) {
+        toLocalIndexMap[globalIndex] = localIndex;
+        ++localIndex;
+    }
+
+    // Prepare an environment for the underlying equation solver
+    auto subEnv = env;
+    if (subEnv.solver().getLinearEquationSolverType() == storm::solver::EquationSolverType::Topological) {
+        // Topological solver does not make any sense since the BSCC is connected.
+        subEnv.solver().setLinearEquationSolverType(subEnv.solver().topological().getUnderlyingEquationSolverType(),
+                                                    subEnv.solver().topological().isUnderlyingEquationSolverTypeSetFromDefault());
+    }
+    subEnv.solver().setLinearEquationSolverPrecision(env.solver().lra().getPrecision(), env.solver().lra().getRelativeTerminationCriterion());
+
+    // Build the equation system matrix and vector.
+    storm::solver::GeneralLinearEquationSolverFactory<ValueType> linearEquationSolverFactory;
+    bool isEquationSystemFormat =
+        linearEquationSolverFactory.getEquationProblemFormat(subEnv) == storm::solver::LinearEquationSolverProblemFormat::EquationSystem;
+    storm::storage::SparseMatrixBuilder<ValueType> builder(scc.size(), scc.size());
+    std::vector<ValueType> eqSysVector;
+    eqSysVector.reserve(scc.size());
+
+    // We will create an equation system of the form: pg(s) - E_delta(pg, s) = Sigma ... (see paper)
+    // There are exactly as many variables in the equation system as in the scc, so we reuse them!
+    ValueType entryValue;
+    for (const auto& globalState : scc) { // TODO consider rates?
+        ValueType probSumToPrecalculated = storm::utility::zero<ValueType>();
+        auto localState = toLocalIndexMap[globalState];
+        builder.addDiagonalEntry(localState, storm::utility::one<ValueType>());
+
+        for (const auto& entry : this->_transitionMatrix.getRow(globalState)) {
+            entryValue = entry.getValue();
+            if (toLocalIndexMap.contains(entry.getColumn())) {
+                uint64_t localCol = toLocalIndexMap[entry.getColumn()];
+                if (localState == localCol) { // We should add 1 in case this is the pgs value itself. If this is never found, then it was already set by addDiagonalEntry.
+                    builder.addNextValue(localState, localCol, storm::utility::one<ValueType>() - entryValue);
+                } else {
+                    builder.addNextValue(localState, localCol, entryValue);
+                }
+            } else if (succgStates[g].contains(entry.getColumn())) { // Calculate the sum in step 9.
+                probSumToPrecalculated += entryValue;
+            }
+        }
+        eqSysVector.push_back(probSumToPrecalculated);
+    }
+    auto solver = linearEquationSolverFactory.create(subEnv, builder.build());
+    // Check solver requirements.
+    auto requirements = solver->getRequirements(subEnv);
+    STORM_LOG_THROW(!requirements.hasEnabledCriticalRequirement(), storm::exceptions::UnmetRequirementException,
+                    "Solver requirements " + requirements.getEnabledRequirementsAsString() + " not checked.");
+    std::vector<ValueType> eqSysSol(scc.size(), storm::utility::zero<ValueType>());
+    solver->solveEquations(subEnv, eqSysSol, eqSysVector);
+
+    // Now we are left with a vector eqSysSol of solution values, but we still need to set p accordingly.
+    for (auto [globalState, localState] : toLocalIndexMap) {
+        p[g][globalState] = eqSysVector[localState];
+    }
+    return p;
+}
+
+template <typename ValueType>
+std::vector<ValueType> SparseDeterministicInfiniteHorizonHelper<ValueType>::computeBiases(Environment const& env, ValueGetter const& stateValuesGetter,
+    ValueGetter const& actionValuesGetter, std::vector<ValueType> biases, storm::storage::StronglyConnectedComponent scc,
+    storm::storage::FlatSet<unsigned long> S_lt, std::vector<ValueType> gains) {
+
+    // we want that the returned vector is sorted as the bscc. So let's assert that the bscc is sorted ascendingly.
+    STORM_LOG_ASSERT(std::is_sorted(scc.begin(), scc.end()), "Expected that sccs are sorted.");
+
+    // Get a mapping from global state indices to local ones.
+    std::unordered_map<uint64_t, uint64_t> toLocalIndexMap;
+    uint64_t localIndex = 0;
+    for (auto const& globalIndex : scc) {
+        toLocalIndexMap[globalIndex] = localIndex;
+        ++localIndex;
+    }
+
+    // Prepare an environment for the underlying equation solver
+    auto subEnv = env;
+    if (subEnv.solver().getLinearEquationSolverType() == storm::solver::EquationSolverType::Topological) {
+        // Topological solver does not make any sense since the BSCC is connected.
+        subEnv.solver().setLinearEquationSolverType(subEnv.solver().topological().getUnderlyingEquationSolverType(),
+                                                    subEnv.solver().topological().isUnderlyingEquationSolverTypeSetFromDefault());
+    }
+    subEnv.solver().setLinearEquationSolverPrecision(env.solver().lra().getPrecision(), env.solver().lra().getRelativeTerminationCriterion());
+
+    // Build the equation system matrix and vector.
+    storm::solver::GeneralLinearEquationSolverFactory<ValueType> linearEquationSolverFactory;
+    bool isEquationSystemFormat =
+        linearEquationSolverFactory.getEquationProblemFormat(subEnv) == storm::solver::LinearEquationSolverProblemFormat::EquationSystem;
+    storm::storage::SparseMatrixBuilder<ValueType> builder(scc.size(), scc.size());
+    std::vector<ValueType> eqSysVector;
+    eqSysVector.reserve(scc.size());
+
+    // We will create a system of equations of the form b(s) - E_delta^Si(b,s) = E_delta^S_lt(b,s) + r(s) - g(s)
+    // There are exactly as many variables in the equation system as in the scc, so we reuse them!
+    ValueType entryValue;
+    for (const auto& globalState : scc) { // TODO consider rates?
+        ValueType biasSumPrecalculated = storm::utility::zero<ValueType>();
+        auto localState = toLocalIndexMap[globalState];
+        builder.addDiagonalEntry(localState, storm::utility::one<ValueType>());
+
+        for (const auto& entry : this->_transitionMatrix.getRow(globalState)) {
+            entryValue = entry.getValue();
+            if (toLocalIndexMap.contains(entry.getColumn())) {
+                uint64_t localCol = toLocalIndexMap[entry.getColumn()];
+                if (localState == localCol) { // We should add 1 in case this is the b(s) value itself. If this is never found, then it was already set by addDiagonalEntry.
+                    builder.addNextValue(localState, localCol, storm::utility::one<ValueType>() - entryValue);
+                } else {
+                    builder.addNextValue(localState, localCol, entryValue);
+                }
+            } else if (S_lt.contains(entry.getColumn())) { // Calculate the sum in step 9.
+                biasSumPrecalculated += entryValue;
+            }
+        }
+        eqSysVector.push_back(biasSumPrecalculated + stateValuesGetter(globalState) + actionValuesGetter(globalState) - gains[globalState]);
+    }
+    auto solver = linearEquationSolverFactory.create(subEnv, builder.build());
+    // Check solver requirements.
+    auto requirements = solver->getRequirements(subEnv);
+    STORM_LOG_THROW(!requirements.hasEnabledCriticalRequirement(), storm::exceptions::UnmetRequirementException,
+                    "Solver requirements " + requirements.getEnabledRequirementsAsString() + " not checked.");
+    std::vector<ValueType> eqSysSol(scc.size(), storm::utility::zero<ValueType>());
+    solver->solveEquations(subEnv, eqSysSol, eqSysVector);
+    return eqSysSol;
+}
+
 template<typename ValueType>
 bool sccDecompositionContainsScc(storage::StronglyConnectedComponent scc, storage::StronglyConnectedComponentDecomposition<ValueType> sccDecomp) {
     for (const auto& scc_ : sccDecomp) {
@@ -283,31 +418,33 @@ std::pair<std::vector<ValueType>, std::vector<ValueType>> SparseDeterministicInf
     }
 
     for (unsigned long i = m; i >= 1; --i) { // Note that we iterate in reverse, but we need this, since in the paper S_lt is in reverse.
-        auto Si = sccDecompNoBscc[i].getStates();
+        auto Si = sccDecompNoBscc[i];
         for (auto s : Si) { S_lt.insert(s); } // Step 6
 
         // Step 7-8
-        auto succgGain = storm::storage::FlatSet<ValueType>();
-        auto succgStates = storm::storage::FlatSet<unsigned long>();
+        auto succgStates = std::map<ValueType, storm::storage::FlatSet<uint64_t>>();
         for (auto s : Si) {
             for (const auto& entry : this->_transitionMatrix.getRow(s)) {
                 if (entry.getValue() != storm::utility::zero<ValueType>()) {
-                    succgGain.insert_unique(gains[entry.getColumn()]);
-                    succgStates.insert_unique(entry.getColumn());
+                    auto g = gains[entry.getColumn()];
+                    succgStates[g].insert(entry.getColumn());
                 }
             }
         }
 
-        p = this->computeGainProbabilities(env, p, Si); // Step 9 TODO implement
+        // Step 9
+        for (auto g : succgStates | std::views::keys) {
+            p = this->computeGainProbabilities(env, p, Si, g, succgStates);
+        }
 
         // Step 10
         for (auto s : Si) {
-            for (ValueType g : succgGain) {
+            for (ValueType g : succgStates | std::views::keys) {
                 gains[s] += p[g][s] * g;
             }
         }
 
-        biases = this->computeBiases(env, stateValuesGetter, actionValuesGetter, biases, Si); // Step 11 TODO implement
+        biases = this->computeBiases(env, stateValuesGetter, actionValuesGetter, biases, Si, S_lt, gains); // step 11
     }
     return std::pair<std::vector<ValueType>, std::vector<ValueType>>(gains, biases);
 }
