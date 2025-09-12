@@ -394,7 +394,8 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
 
     /* Matrix that will be used for the induced DTMCs and its helper */
     auto mecBitVector = storm::storage::BitVector(this->_transitionMatrix.getRowGroupCount());
-    std::vector<uint64_t> mecStatesVector(mec.getStateSet().begin(), mec.getStateSet().end());
+    auto stateSet = mec.getStateSet(); // store it in a variable first
+    std::vector<uint64_t> mecStatesVector(stateSet.begin(), stateSet.end());
     std::sort(mecStatesVector.begin(), mecStatesVector.end());
 
     for (const auto& state : mec.getStateSet()) { mecBitVector.set(state); }
@@ -432,7 +433,7 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
         auto [schedulerChangedGain, newSchedulerGain] = this->gainImprovementStep(env, scheduler, stateToGainMap, mec); // Step 3
         if (schedulerChangedGain) { // Step 4-5
             scheduler = newSchedulerGain;
-            deterministicMatrix = storm::utility::matrix::applyScheduler<ValueType>(this->_transitionMatrix, scheduler); // TODO do I need to destroy the old matrix manually?
+            deterministicMatrix = storm::utility::matrix::applyScheduler<ValueType>(this->_transitionMatrix, scheduler).getSubmatrix(true, mecBitVector, mecBitVector); // TODO do I need to destroy the old matrix manually?
             helper = std::make_unique<SparseDeterministicInfiniteHorizonHelper<ValueType>>(deterministicMatrix); // TODO this may be unnecessary, investigate later!
             n++;
             continue;
@@ -441,8 +442,9 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
         auto [schedulerChanged, newScheduler] = this->biasImprovementStep(env, stateRewardsGetter, actionRewardsGetter, mec, scheduler, stateToBiasMap); // Step 6
         if (schedulerChanged) {
             scheduler = newScheduler;
-            deterministicMatrix = storm::utility::matrix::applyScheduler<ValueType>(this->_transitionMatrix, scheduler); // TODO do I need to destroy the old matrix manually?
+            deterministicMatrix = storm::utility::matrix::applyScheduler<ValueType>(this->_transitionMatrix, scheduler).getSubmatrix(true, mecBitVector, mecBitVector); // TODO do I need to destroy the old matrix manually?
             helper = std::make_unique<SparseDeterministicInfiniteHorizonHelper<ValueType>>(deterministicMatrix); // TODO this may be unnecessary, investigate later!
+            n++;
         } else {
             return gains[0]; // We just return the first one since they should all be the same in a MEC.
             // TODO when debugging, we should check if this actually works.
