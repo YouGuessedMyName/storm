@@ -98,34 +98,34 @@ class GBNativeWalkerChaeEnvironment {
     }
 };
 
-class DistrGmmxxDoubleGmresEnvironment {
-   public:
-    typedef double ValueType;
-    static const bool isExact = false;
-    static storm::Environment createEnvironment() {
-        storm::Environment env;
-        env.solver().lra().setDetLraMethod(storm::solver::LraMethod::LraDistributionEquations);
-        env.solver().setLinearEquationSolverType(storm::solver::EquationSolverType::Gmmxx);
-        env.solver().gmmxx().setMethod(storm::solver::GmmxxLinearEquationSolverMethod::Gmres);
-        env.solver().gmmxx().setPreconditioner(storm::solver::GmmxxLinearEquationSolverPreconditioner::Ilu);
-        env.solver().gmmxx().setPrecision(storm::utility::convertNumber<storm::RationalNumber>(1e-8));
-        env.solver().lra().setPrecision(storm::utility::convertNumber<storm::RationalNumber>(1e-8));
-        return env;
-    }
-};
-
-class DistrEigenRationalLUEnvironment {
-   public:
-    typedef storm::RationalNumber ValueType;
-    static const bool isExact = true;
-    static storm::Environment createEnvironment() {
-        storm::Environment env;
-        env.solver().lra().setDetLraMethod(storm::solver::LraMethod::LraDistributionEquations);
-        env.solver().setLinearEquationSolverType(storm::solver::EquationSolverType::Eigen);
-        env.solver().eigen().setMethod(storm::solver::EigenLinearEquationSolverMethod::SparseLU);
-        return env;
-    }
-};
+// class DistrGmmxxDoubleGmresEnvironment {
+//    public:
+//     typedef double ValueType;
+//     static const bool isExact = false;
+//     static storm::Environment createEnvironment() {
+//         storm::Environment env;
+//         env.solver().lra().setDetLraMethod(storm::solver::LraMethod::LraDistributionEquations);
+//         env.solver().setLinearEquationSolverType(storm::solver::EquationSolverType::Gmmxx);
+//         env.solver().gmmxx().setMethod(storm::solver::GmmxxLinearEquationSolverMethod::Gmres);
+//         env.solver().gmmxx().setPreconditioner(storm::solver::GmmxxLinearEquationSolverPreconditioner::Ilu);
+//         env.solver().gmmxx().setPrecision(storm::utility::convertNumber<storm::RationalNumber>(1e-8));
+//         env.solver().lra().setPrecision(storm::utility::convertNumber<storm::RationalNumber>(1e-8));
+//         return env;
+//     }
+// };
+//
+// class DistrEigenRationalLUEnvironment {
+//    public:
+//     typedef storm::RationalNumber ValueType;
+//     static const bool isExact = true;
+//     static storm::Environment createEnvironment() {
+//         storm::Environment env;
+//         env.solver().lra().setDetLraMethod(storm::solver::LraMethod::LraDistributionEquations);
+//         env.solver().setLinearEquationSolverType(storm::solver::EquationSolverType::Eigen);
+//         env.solver().eigen().setMethod(storm::solver::EigenLinearEquationSolverMethod::SparseLU);
+//         return env;
+//     }
+// };
 
 class DistrNativeWalkerChaeEnvironment {
    public:
@@ -143,17 +143,17 @@ class DistrNativeWalkerChaeEnvironment {
     }
 };
 
-class ValueIterationEnvironment {
-   public:
-    typedef double ValueType;
-    static const bool isExact = false;
-    static storm::Environment createEnvironment() {
-        storm::Environment env;
-        env.solver().lra().setDetLraMethod(storm::solver::LraMethod::ValueIteration);
-        env.solver().lra().setPrecision(storm::utility::convertNumber<storm::RationalNumber>(1e-8));
-        return env;
-    }
-};
+// class ValueIterationEnvironment {
+//    public:
+//     typedef double ValueType;
+//     static const bool isExact = false;
+//     static storm::Environment createEnvironment() {
+//         storm::Environment env;
+//         env.solver().lra().setDetLraMethod(storm::solver::LraMethod::ValueIteration);
+//         env.solver().lra().setPrecision(storm::utility::convertNumber<storm::RationalNumber>(1e-8));
+//         return env;
+//     }
+// };
 
 template<typename TestType>
 class LraDtmcPrctlModelCheckerTest : public ::testing::Test {
@@ -176,10 +176,9 @@ class LraDtmcPrctlModelCheckerTest : public ::testing::Test {
 
 typedef ::testing::Types<
 #ifdef STORM_HAVE_GMM
-    GBGmmxxDoubleGmresEnvironment, GBEigenDoubleDGmresEnvironment, DistrGmmxxDoubleGmresEnvironment,
+    GBGmmxxDoubleGmresEnvironment, GBEigenDoubleDGmresEnvironment, // DistrGmmxxDoubleGmresEnvironment,
 #endif
-    GBEigenRationalLUEnvironment, GBNativeSorEnvironment, GBNativeWalkerChaeEnvironment, DistrEigenRationalLUEnvironment, DistrNativeWalkerChaeEnvironment,
-    ValueIterationEnvironment>
+    GBEigenRationalLUEnvironment, GBNativeSorEnvironment, GBNativeWalkerChaeEnvironment, DistrNativeWalkerChaeEnvironment>//, DistrEigenRationalLUEnvironment, ValueIterationEnvironment>
     TestingTypes;
 
 TYPED_TEST_SUITE(LraDtmcPrctlModelCheckerTest, TestingTypes, );

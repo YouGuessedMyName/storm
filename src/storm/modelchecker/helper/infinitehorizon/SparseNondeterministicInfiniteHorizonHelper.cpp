@@ -330,7 +330,7 @@ pair<bool, storm::storage::Scheduler<ValueType>> SparseNondeterministicInfiniteH
 
 template<typename ValueType>
 pair<bool, storm::storage::Scheduler<ValueType>> SparseNondeterministicInfiniteHorizonHelper<ValueType>::gainImprovementStep(Environment const& env, storm::storage::Scheduler<ValueType> scheduler,
-        vector<ValueType> gains, storm::storage::MaximalEndComponent const& mec) {
+        std::map<unsigned long, ValueType> stateToGainMap, storm::storage::MaximalEndComponent const& mec) {
     bool schedulerWasChanged = false;
     for (const unsigned long& state : mec.getStateSet()) {
         auto stateRowIndex = this->_transitionMatrix.getRowGroupIndices()[state];
@@ -355,7 +355,7 @@ pair<bool, storm::storage::Scheduler<ValueType>> SparseNondeterministicInfiniteH
             for (auto succ : succRow) {
                 ValueType p = succ.getValue();
                 auto succCol = succ.getColumn();
-                auto gain = gains.at(succCol);
+                auto gain = stateToGainMap.at(succCol);
                 sum = sum + p * gain; // TODO is this the correct input to stateRewardsGetter?
                 //cout << bias << endl;
             }
@@ -398,7 +398,8 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
     std::sort(mecStatesVector.begin(), mecStatesVector.end());
 
     for (const auto& state : mec.getStateSet()) { mecBitVector.set(state); }
-    auto deterministicMatrix = storm::utility::matrix::applyScheduler(this->_transitionMatrix, scheduler).getSubmatrix(true, mecBitVector, mecBitVector);//.restrictRows(mecBitVector); // We only keep the rows from the MEC, that makes everything so much easier.
+    // We only keep the rows from the MEC, that avoids having three types of indices for the states.
+    auto deterministicMatrix = storm::utility::matrix::applyScheduler(this->_transitionMatrix, scheduler).getSubmatrix(true, mecBitVector, mecBitVector);
     std::unique_ptr<SparseDeterministicInfiniteHorizonHelper<ValueType>> helper;
     // Modified reward getters for the restricted DTMC with only the states that were in the MEC.
     ValueGetter inducedStateRewardsGetter = [&stateRewardsGetter, &mecStatesVector](uint64_t state) -> ValueType {
@@ -410,12 +411,9 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
 
     helper = std::make_unique<SparseDeterministicInfiniteHorizonHelper<ValueType>>(deterministicMatrix); // Initiate the helper so that we can use computeLraForBsccGainBias (step 2)
 
-    /* SSC that corresponds to the MEC in the induced DTMCs */
-    // storm::storage::StronglyConnectedComponent scc;
-    // auto stateSet = mec.getStateSet();
-    // for (auto s : stateSet) { scc.insert(s); }
 
-    /* Map from state number (column number) -> bias */
+    /* Map from state number (column number) -> gain/bias */
+    std::map<unsigned long, ValueType> stateToGainMap;
     std::map<unsigned long, ValueType> stateToBiasMap;
     std::map<unsigned long, unsigned long> stateMecIndexMap; // state -> index in scc. Only used for calculating stateToBiasMap.
     unsigned long bsccIndex = 0;
@@ -426,7 +424,12 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
         cout << n << " -----------------------------" << endl;
 
         auto [gains, biases] = helper->computeLraGainBias(env, inducedStateRewardsGetter, inducedActionRewardsGetter);
-        auto [schedulerChangedGain, newSchedulerGain] = this->gainImprovementStep(env, scheduler, gains, mec); // Step 3
+        for (const auto& [state, mecIndex] : stateMecIndexMap) {
+            stateToGainMap[state] = gains[mecIndex];
+            stateToBiasMap[state] = biases[mecIndex];
+        }
+
+        auto [schedulerChangedGain, newSchedulerGain] = this->gainImprovementStep(env, scheduler, stateToGainMap, mec); // Step 3
         if (schedulerChangedGain) { // Step 4-5
             scheduler = newSchedulerGain;
             deterministicMatrix = storm::utility::matrix::applyScheduler<ValueType>(this->_transitionMatrix, scheduler); // TODO do I need to destroy the old matrix manually?
@@ -435,10 +438,7 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
             continue;
         }
 
-        for (const auto& [state, mecIndex] : stateMecIndexMap) {
-            stateToBiasMap[state] = biases[mecIndex];
-        }
-        auto [schedulerChanged, newScheduler] = this->biasImprovementStep(env, stateRewardsGetter, actionRewardsGetter, mec, scheduler, stateToBiasMap); // STep 6
+        auto [schedulerChanged, newScheduler] = this->biasImprovementStep(env, stateRewardsGetter, actionRewardsGetter, mec, scheduler, stateToBiasMap); // Step 6
         if (schedulerChanged) {
             scheduler = newScheduler;
             deterministicMatrix = storm::utility::matrix::applyScheduler<ValueType>(this->_transitionMatrix, scheduler); // TODO do I need to destroy the old matrix manually?

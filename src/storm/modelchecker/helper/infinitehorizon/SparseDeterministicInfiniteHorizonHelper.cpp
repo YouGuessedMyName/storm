@@ -392,8 +392,8 @@ template<typename ValueType>
 std::pair<std::vector<ValueType>, std::vector<ValueType>> SparseDeterministicInfiniteHorizonHelper<ValueType>::computeLraGainBias(
     Environment const& env, ValueGetter const& stateValuesGetter, ValueGetter const& actionValuesGetter) {
 
-    auto gains = std::vector<ValueType>();
-    auto biases = std::vector<ValueType>();
+    auto gains = std::vector<ValueType>(this->_transitionMatrix.getRowCount());
+    auto biases = std::vector<ValueType>(this->_transitionMatrix.getRowCount());
     // Maps gain to state to probability
     auto p = std::map<ValueType, std::map<unsigned long, ValueType>>();
 
@@ -412,12 +412,14 @@ std::pair<std::vector<ValueType>, std::vector<ValueType>> SparseDeterministicInf
         for (auto state : bscc.getStates()) { S_lt.insert(state); }
     }
 
-    for (storage::StronglyConnectedComponent bscc : std::ranges::reverse_view(bsccDecomp)) {
-        auto [bsccGain, biases] = this->computeLraForBsccGainBias(env, stateValuesGetter, actionValuesGetter, bscc);
-        for (auto state : bscc) { gains[state] = bsccGain; } // step 4
+    for (storage::StronglyConnectedComponent bscc : bsccDecomp) {
+        auto [bsccGain, _] = this->computeLraForBsccGainBias(env, stateValuesGetter, actionValuesGetter, bscc);
+        for (auto state : bscc) {
+            gains[state] = bsccGain;
+        } // step 4
     }
 
-    for (unsigned long i = m; i >= 1; --i) { // Note that we iterate in reverse, but we need this, since in the paper S_lt is in reverse.
+    for (unsigned long i = m; i >= 1; --i) { // Note that we iterate in reverse, but we need this, since in the paper sccDecompNoBscc is in reverse.
         auto Si = sccDecompNoBscc[i];
         for (auto s : Si) { S_lt.insert(s); } // Step 6
 

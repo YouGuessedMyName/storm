@@ -1,5 +1,6 @@
 #include "SparseInfiniteHorizonHelper.h"
 
+#include "SparseDeterministicInfiniteHorizonHelper.h"
 #include "storm/modelchecker/helper/infinitehorizon/internal/ComponentUtility.h"
 #include "storm/modelchecker/helper/infinitehorizon/internal/LraViHelper.h"
 
@@ -138,6 +139,27 @@ std::vector<ValueType> SparseInfiniteHorizonHelper<ValueType, Nondeterministic>:
     // For a description of this approach see, e.g., Guck et al.: Modelling and Analysis of Markov Reward Automata (ATVA'14),
     // https://doi.org/10.1007/978-3-319-11936-6_13
 
+    // TODO Ask if these changes should be kept
+    // If GainBiasEquations are selected as the method, then instead the method of algorithm 3 from the 2017 paper is chosen.
+
+    // If requested, allocate memory for the choices made
+    if (Nondeterministic && this->isProduceSchedulerSet()) {
+        if (!_producedOptimalChoices.is_initialized()) {
+            _producedOptimalChoices.emplace();
+        }
+        _producedOptimalChoices->resize(_transitionMatrix.getRowGroupCount());
+    }
+    STORM_LOG_ASSERT(Nondeterministic || !this->isProduceSchedulerSet(), "Scheduler production enabled for deterministic model.");
+
+    auto method = env.solver().lra().getDetLraMethod();
+
+
+    if (method == storm::solver::LraMethod::GainBiasEquations) {
+        auto helper = storm::modelchecker::helper::SparseDeterministicInfiniteHorizonHelper<ValueType>(this->_transitionMatrix);
+        auto [gain, _] = helper.computeLraGainBias(env, stateRewardsGetter, actionRewardsGetter);
+        return gain;
+    }
+
     // Prepare an environment for the underlying solvers.
     auto underlyingSolverEnvironment = env;
     if (env.solver().isForceSoundness()) {
@@ -148,15 +170,6 @@ std::vector<ValueType> SparseInfiniteHorizonHelper<ValueType, Nondeterministic>:
         underlyingSolverEnvironment.solver().setLinearEquationSolverPrecision(newPrecision, env.solver().lra().getRelativeTerminationCriterion());
         underlyingSolverEnvironment.solver().lra().setPrecision(newPrecision);
     }
-
-    // If requested, allocate memory for the choices made
-    if (Nondeterministic && this->isProduceSchedulerSet()) {
-        if (!_producedOptimalChoices.is_initialized()) {
-            _producedOptimalChoices.emplace();
-        }
-        _producedOptimalChoices->resize(_transitionMatrix.getRowGroupCount());
-    }
-    STORM_LOG_ASSERT(Nondeterministic || !this->isProduceSchedulerSet(), "Scheduler production enabled for deterministic model.");
 
     // Decompose the model to their bottom components (MECS or BSCCS)
     createDecomposition();
