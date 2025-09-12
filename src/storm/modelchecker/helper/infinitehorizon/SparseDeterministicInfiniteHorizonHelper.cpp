@@ -24,6 +24,7 @@
 
 #include "storm/exceptions/NotSupportedException.h"
 #include "storm/exceptions/UnmetRequirementException.h"
+#include "storm/utility/graph.h"
 
 namespace storm {
 namespace modelchecker {
@@ -291,7 +292,7 @@ std::map<ValueType, std::map<unsigned long, ValueType>> SparseDeterministicInfin
                 if (localState == localCol) { // We should add 1 in case this is the pgs value itself. If this is never found, then it was already set by addDiagonalEntry.
                     builder.addNextValue(localState, localCol, storm::utility::one<ValueType>() - entryValue);
                 } else {
-                    builder.addNextValue(localState, localCol, entryValue);
+                    builder.addNextValue(localState, localCol, -entryValue);
                 }
             } else if (succgStates[g].contains(entry.getColumn())) { // Calculate the sum in step 9.
                 probSumToPrecalculated += entryValue;
@@ -299,7 +300,10 @@ std::map<ValueType, std::map<unsigned long, ValueType>> SparseDeterministicInfin
         }
         eqSysVector.push_back(probSumToPrecalculated);
     }
-    auto solver = linearEquationSolverFactory.create(subEnv, builder.build());
+
+    auto matrix = builder.build();
+
+    auto solver = linearEquationSolverFactory.create(subEnv, matrix);
     // Check solver requirements.
     auto requirements = solver->getRequirements(subEnv);
     STORM_LOG_THROW(!requirements.hasEnabledCriticalRequirement(), storm::exceptions::UnmetRequirementException,
@@ -309,7 +313,7 @@ std::map<ValueType, std::map<unsigned long, ValueType>> SparseDeterministicInfin
 
     // Now we are left with a vector eqSysSol of solution values, but we still need to set p accordingly.
     for (auto [globalState, localState] : toLocalIndexMap) {
-        p[g][globalState] = eqSysVector[localState];
+        p[g][globalState] = eqSysSol[localState];
     }
     return p;
 }
@@ -362,15 +366,16 @@ std::vector<ValueType> SparseDeterministicInfiniteHorizonHelper<ValueType>::comp
                 if (localState == localCol) { // We should add 1 in case this is the b(s) value itself. If this is never found, then it was already set by addDiagonalEntry.
                     builder.addNextValue(localState, localCol, storm::utility::one<ValueType>() - entryValue);
                 } else {
-                    builder.addNextValue(localState, localCol, entryValue);
+                    builder.addNextValue(localState, localCol, -entryValue);
                 }
             } else if (S_lt.contains(entry.getColumn())) { // Calculate the sum in step 9.
-                biasSumPrecalculated += entryValue;
+                biasSumPrecalculated += entryValue * biases[entry.getColumn()];
             }
         }
         eqSysVector.push_back(biasSumPrecalculated + stateValuesGetter(globalState) + actionValuesGetter(globalState) - gains[globalState]);
     }
-    auto solver = linearEquationSolverFactory.create(subEnv, builder.build());
+    auto matrix = builder.build();
+    auto solver = linearEquationSolverFactory.create(subEnv, matrix);
     // Check solver requirements.
     auto requirements = solver->getRequirements(subEnv);
     STORM_LOG_THROW(!requirements.hasEnabledCriticalRequirement(), storm::exceptions::UnmetRequirementException,
@@ -400,6 +405,13 @@ std::pair<std::vector<ValueType>, std::vector<ValueType>> SparseDeterministicInf
     storm::storage::StronglyConnectedComponentDecomposition<ValueType> bsccDecomp(this->_transitionMatrix,
                                                                              storm::storage::StronglyConnectedComponentDecompositionOptions().onlyBottomSccs().forceTopologicalSort());
     storm::storage::StronglyConnectedComponentDecomposition<ValueType> oldSccDecomp(this->_transitionMatrix, storm::storage::StronglyConnectedComponentDecompositionOptions().forceTopologicalSort());
+    storm::storage::FlatSet<uint64_t> transientStates;
+    for (auto scc : oldSccDecomp) {
+        if (scc.size() == 1) {
+            transientStates.insert(scc.getStates().sequence()[0]);
+        }
+    }
+
     auto m = oldSccDecomp.size() - bsccDecomp.size();
     std::vector<storage::StronglyConnectedComponent> sccDecompNoBscc(0);
     for (auto scc : oldSccDecomp) {
@@ -413,21 +425,28 @@ std::pair<std::vector<ValueType>, std::vector<ValueType>> SparseDeterministicInf
     }
 
     for (storage::StronglyConnectedComponent bscc : bsccDecomp) {
-        auto [bsccGain, _] = this->computeLraForBsccGainBias(env, stateValuesGetter, actionValuesGetter, bscc);
+        auto [bsccGain, bsccBiases] = this->computeLraForBsccGainBias(env, stateValuesGetter, actionValuesGetter, bscc);
+        unsigned int i = 0;
         for (auto state : bscc) {
             gains[state] = bsccGain;
+            biases[state] = bsccBiases[i];
+            i++;
         } // step 4
     }
 
-    for (unsigned long i = m; i >= 1; --i) { // Note that we iterate in reverse, but we need this, since in the paper sccDecompNoBscc is in reverse.
+    for (unsigned long i = 0; i < m; --i) {
+        if (i > 0) {
+            for (auto s : sccDecompNoBscc[i-1]) { S_lt.insert(s); } // Step 6 (the order is shuffled for performance reasons)
+        }
+
         auto Si = sccDecompNoBscc[i];
-        for (auto s : Si) { S_lt.insert(s); } // Step 6
+
 
         // Step 7-8
         auto succgStates = std::map<ValueType, storm::storage::FlatSet<uint64_t>>();
         for (auto s : Si) {
             for (const auto& entry : this->_transitionMatrix.getRow(s)) {
-                if (entry.getValue() != storm::utility::zero<ValueType>()) {
+                if (entry.getValue() != storm::utility::zero<ValueType>() && S_lt.contains(entry.getColumn())) {
                     auto g = gains[entry.getColumn()];
                     succgStates[g].insert(entry.getColumn());
                 }
@@ -446,8 +465,30 @@ std::pair<std::vector<ValueType>, std::vector<ValueType>> SparseDeterministicInf
             }
         }
 
-        biases = this->computeBiases(env, stateValuesGetter, actionValuesGetter, biases, Si, S_lt, gains); // step 11
+        auto Si_biases = this->computeBiases(env, stateValuesGetter, actionValuesGetter, biases, Si, S_lt, gains); // step 11
+        unsigned int j = 0;
+        for (auto s : Si) {
+            biases[s] += Si_biases[j];
+            j++;
+        }
     }
+
+    // To account for the transient states, we take the topo sort.
+    // We can then calculate the gain and bias by simply filling out the equations.
+    auto topoSort = storm::utility::graph::getTopologicalSort(this->_transitionMatrix);
+    for (auto state : topoSort) {
+        if (transientStates.contains(state)) {
+            auto successorGainSum = storm::utility::zero<ValueType>();
+            auto successorBiasSum = storm::utility::zero<ValueType>();
+            for (const auto& entry : this->_transitionMatrix.getRow(state)) {
+                successorGainSum += entry.getValue() * gains[entry.getColumn()];
+                successorBiasSum += entry.getValue() * biases[entry.getColumn()];
+            }
+            gains[state] = successorGainSum;
+            biases[state] = successorBiasSum + stateValuesGetter(state) + actionValuesGetter(state);
+        }
+    }
+
     return std::pair<std::vector<ValueType>, std::vector<ValueType>>(gains, biases);
 }
 
