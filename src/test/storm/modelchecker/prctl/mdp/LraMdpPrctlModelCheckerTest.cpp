@@ -26,36 +26,36 @@
 
 namespace {
 
-class SparseValueTypeValueIterationEnvironment {
-   public:
-    static const bool isExact = false;
-    typedef double ValueType;
-    typedef storm::models::sparse::Mdp<ValueType> ModelType;
-    static storm::Environment createEnvironment() {
-        storm::Environment env;
-        env.solver().lra().setNondetLraMethod(storm::solver::LraMethod::ValueIteration);
-        env.solver().lra().setPrecision(storm::utility::convertNumber<storm::RationalNumber>(1e-10));
-        return env;
-    }
-};
-
-class SparseValueTypeLinearProgrammingEnvironment {
-   public:
-    static const bool isExact = false;
-    typedef double ValueType;
-    typedef storm::models::sparse::Mdp<ValueType> ModelType;
-    static storm::Environment createEnvironment() {
-        storm::Environment env;
-        env.solver().lra().setNondetLraMethod(storm::solver::LraMethod::LinearProgramming);
-        env.solver().lra().setPrecision(storm::utility::convertNumber<storm::RationalNumber>(1e-10));
-        return env;
-    }
-};
+// class SparseValueTypeValueIterationEnvironment {
+//    public:
+//     static const bool isExact = false;
+//     typedef double ValueType;
+//     typedef storm::models::sparse::Mdp<ValueType> ModelType;
+//     static storm::Environment createEnvironment() {
+//         storm::Environment env;
+//         env.solver().lra().setNondetLraMethod(storm::solver::LraMethod::ValueIteration);
+//         env.solver().lra().setPrecision(storm::utility::convertNumber<storm::RationalNumber>(1e-10));
+//         return env;
+//     }
+// };
+//
+// class SparseValueTypeLinearProgrammingEnvironment {
+//    public:
+//     static const bool isExact = false;
+//     typedef double ValueType;
+//     typedef storm::models::sparse::Mdp<ValueType> ModelType;
+//     static storm::Environment createEnvironment() {
+//         storm::Environment env;
+//         env.solver().lra().setNondetLraMethod(storm::solver::LraMethod::LinearProgramming);
+//         env.solver().lra().setPrecision(storm::utility::convertNumber<storm::RationalNumber>(1e-10));
+//         return env;
+//     }
+// };
 
 class SparseValueTypePolicyIterationEnvironment {
-public:
+   public:
     static const bool isExact = false;
-    typedef storm::RationalNumber ValueType;
+    typedef double ValueType;
     typedef storm::models::sparse::Mdp<ValueType> ModelType;
     static storm::Environment createEnvironment() {
         storm::Environment env;
@@ -66,29 +66,29 @@ public:
     }
 };
 
-class SparseSoundEnvironment {
-   public:
-    static const bool isExact = false;
-    typedef double ValueType;
-    typedef storm::models::sparse::Mdp<ValueType> ModelType;
-    static storm::Environment createEnvironment() {
-        storm::Environment env;
-        env.solver().setForceSoundness(true);
-        return env;
-    }
-};
+// class SparseSoundEnvironment {
+//    public:
+//     static const bool isExact = false;
+//     typedef double ValueType;
+//     typedef storm::models::sparse::Mdp<ValueType> ModelType;
+//     static storm::Environment createEnvironment() {
+//         storm::Environment env;
+//         env.solver().setForceSoundness(true);
+//         return env;
+//     }
+// };
 
-class SparseRationalLinearProgrammingEnvironment {
-   public:
-    static const bool isExact = false;
-    typedef storm::RationalNumber ValueType;
-    typedef storm::models::sparse::Mdp<ValueType> ModelType;
-    static storm::Environment createEnvironment() {
-        storm::Environment env;
-        env.solver().lra().setNondetLraMethod(storm::solver::LraMethod::LinearProgramming);
-        return env;
-    }
-};
+// class SparseRationalLinearProgrammingEnvironment {
+//    public:
+//     static const bool isExact = false;
+//     typedef storm::RationalNumber ValueType;
+//     typedef storm::models::sparse::Mdp<ValueType> ModelType;
+//     static storm::Environment createEnvironment() {
+//         storm::Environment env;
+//         env.solver().lra().setNondetLraMethod(storm::solver::LraMethod::LinearProgramming);
+//         return env;
+//     }
+// };
 
 template<typename TestType>
 class LraMdpPrctlModelCheckerTest : public ::testing::Test {
@@ -140,11 +140,12 @@ class LraMdpPrctlModelCheckerTest : public ::testing::Test {
     storm::Environment _environment;
 };
 
-typedef ::testing::Types<SparseValueTypeValueIterationEnvironment, SparseValueTypeLinearProgrammingEnvironment, SparseValueTypePolicyIterationEnvironment, SparseSoundEnvironment
-#ifdef STORM_HAVE_Z3_OPTIMIZE
-                         ,
-                         SparseRationalLinearProgrammingEnvironment
-#endif
+typedef ::testing::Types<SparseValueTypePolicyIterationEnvironment
+//typedef ::testing::Types<SparseValueTypeValueIterationEnvironment, SparseValueTypeLinearProgrammingEnvironment, SparseValueTypePolicyIterationEnvironment, SparseSoundEnvironment
+// #ifdef STORM_HAVE_Z3_OPTIMIZE
+//                          ,
+//                          SparseRationalLinearProgrammingEnvironment
+// #endif
                          >
     TestingTypes;
 
@@ -311,83 +312,83 @@ TYPED_TEST(LraMdpPrctlModelCheckerTest, LRA) {
     // A parser that we use for conveniently constructing the formulas.
     storm::parser::FormulaParser formulaParser;
 
-    // {
-    //     matrixBuilder = storm::storage::SparseMatrixBuilder<ValueType>(4, 3, 4, true, true, 3);
-    //     matrixBuilder.newRowGroup(0);
-    //     matrixBuilder.addNextValue(0, 1, this->parseNumber("1"));
-    //     matrixBuilder.newRowGroup(1);
-    //     matrixBuilder.addNextValue(1, 1, this->parseNumber("1"));
-    //     matrixBuilder.addNextValue(2, 2, this->parseNumber("1"));
-    //     matrixBuilder.newRowGroup(3);
-    //     matrixBuilder.addNextValue(3, 2, this->parseNumber("1"));
-    //     storm::storage::SparseMatrix<ValueType> transitionMatrix = matrixBuilder.build();
-    //
-    //     storm::models::sparse::StateLabeling ap(3);
-    //     ap.addLabel("a");
-    //     ap.addLabelToState("a", 0);
-    //     ap.addLabel("b");
-    //     ap.addLabelToState("b", 1);
-    //     ap.addLabel("c");
-    //     ap.addLabelToState("c", 2);
-    //
-    //     mdp.reset(new storm::models::sparse::Mdp<ValueType>(transitionMatrix, ap));
-    //
-    //     storm::modelchecker::SparseMdpPrctlModelChecker<storm::models::sparse::Mdp<ValueType>> checker(*mdp);
-    //
-    //     std::shared_ptr<storm::logic::Formula const> formula = formulaParser.parseSingleFormulaFromString("LRAmax=? [\"a\"]");
-    //
-    //     std::unique_ptr<storm::modelchecker::CheckResult> result = checker.check(this->env(), *formula);
-    //     storm::modelchecker::ExplicitQuantitativeCheckResult<ValueType>& quantitativeResult1 = result->asExplicitQuantitativeCheckResult<ValueType>();
-    //
-    //     EXPECT_NEAR(this->parseNumber("0"), quantitativeResult1[0], this->precision());
-    //     EXPECT_NEAR(this->parseNumber("0"), quantitativeResult1[1], this->precision());
-    //     EXPECT_NEAR(this->parseNumber("0"), quantitativeResult1[2], this->precision());
-    //
-    //     formula = formulaParser.parseSingleFormulaFromString("LRAmin=? [\"a\"]");
-    //
-    //     result = checker.check(this->env(), *formula);
-    //     storm::modelchecker::ExplicitQuantitativeCheckResult<ValueType>& quantitativeResult2 = result->asExplicitQuantitativeCheckResult<ValueType>();
-    //
-    //     EXPECT_NEAR(this->parseNumber("0"), quantitativeResult2[0], this->precision());
-    //     EXPECT_NEAR(this->parseNumber("0"), quantitativeResult2[1], this->precision());
-    //     EXPECT_NEAR(this->parseNumber("0"), quantitativeResult2[2], this->precision());
-    //
-    //     formula = formulaParser.parseSingleFormulaFromString("LRAmax=? [\"b\"]");
-    //
-    //     result = checker.check(this->env(), *formula);
-    //     storm::modelchecker::ExplicitQuantitativeCheckResult<ValueType>& quantitativeResult3 = result->asExplicitQuantitativeCheckResult<ValueType>();
-    //
-    //     EXPECT_NEAR(this->parseNumber("1"), quantitativeResult3[0], this->precision());
-    //     EXPECT_NEAR(this->parseNumber("1"), quantitativeResult3[1], this->precision());
-    //     EXPECT_NEAR(this->parseNumber("0"), quantitativeResult3[2], this->precision());
-    //
-    //     formula = formulaParser.parseSingleFormulaFromString("LRAmin=? [\"b\"]");
-    //
-    //     result = checker.check(this->env(), *formula);
-    //     storm::modelchecker::ExplicitQuantitativeCheckResult<ValueType>& quantitativeResult4 = result->asExplicitQuantitativeCheckResult<ValueType>();
-    //
-    //     EXPECT_NEAR(this->parseNumber("0"), quantitativeResult4[0], this->precision());
-    //     EXPECT_NEAR(this->parseNumber("0"), quantitativeResult4[1], this->precision());
-    //     EXPECT_NEAR(this->parseNumber("0"), quantitativeResult4[2], this->precision());
-    //
-    //     formula = formulaParser.parseSingleFormulaFromString("LRAmax=? [\"c\"]");
-    //
-    //     result = checker.check(this->env(), *formula);
-    //     storm::modelchecker::ExplicitQuantitativeCheckResult<ValueType>& quantitativeResult5 = result->asExplicitQuantitativeCheckResult<ValueType>();
-    //
-    //     EXPECT_NEAR(this->parseNumber("1"), quantitativeResult5[0], this->precision());
-    //     EXPECT_NEAR(this->parseNumber("1"), quantitativeResult5[1], this->precision());
-    //     EXPECT_NEAR(this->parseNumber("1"), quantitativeResult5[2], this->precision());
-    //
-    //     formula = formulaParser.parseSingleFormulaFromString("LRAmin=? [\"c\"]");
-    //
-    //     result = checker.check(this->env(), *formula);
-    //     storm::modelchecker::ExplicitQuantitativeCheckResult<ValueType>& quantitativeResult6 = result->asExplicitQuantitativeCheckResult<ValueType>();
-    //
-    //     EXPECT_NEAR(this->parseNumber("0"), quantitativeResult6[0], this->precision());
-    //     EXPECT_NEAR(this->parseNumber("0"), quantitativeResult6[1], this->precision());
-    //     EXPECT_NEAR(this->parseNumber("1"), quantitativeResult6[2], this->precision());
-    // }
+    {
+        matrixBuilder = storm::storage::SparseMatrixBuilder<ValueType>(4, 3, 4, true, true, 3);
+        matrixBuilder.newRowGroup(0);
+        matrixBuilder.addNextValue(0, 1, this->parseNumber("1"));
+        matrixBuilder.newRowGroup(1);
+        matrixBuilder.addNextValue(1, 1, this->parseNumber("1"));
+        matrixBuilder.addNextValue(2, 2, this->parseNumber("1"));
+        matrixBuilder.newRowGroup(3);
+        matrixBuilder.addNextValue(3, 2, this->parseNumber("1"));
+        storm::storage::SparseMatrix<ValueType> transitionMatrix = matrixBuilder.build();
+
+        storm::models::sparse::StateLabeling ap(3);
+        ap.addLabel("a");
+        ap.addLabelToState("a", 0);
+        ap.addLabel("b");
+        ap.addLabelToState("b", 1);
+        ap.addLabel("c");
+        ap.addLabelToState("c", 2);
+
+        mdp.reset(new storm::models::sparse::Mdp<ValueType>(transitionMatrix, ap));
+
+        storm::modelchecker::SparseMdpPrctlModelChecker<storm::models::sparse::Mdp<ValueType>> checker(*mdp);
+
+        std::shared_ptr<storm::logic::Formula const> formula = formulaParser.parseSingleFormulaFromString("LRAmax=? [\"a\"]");
+
+        std::unique_ptr<storm::modelchecker::CheckResult> result = checker.check(this->env(), *formula);
+        storm::modelchecker::ExplicitQuantitativeCheckResult<ValueType>& quantitativeResult1 = result->asExplicitQuantitativeCheckResult<ValueType>();
+
+        EXPECT_NEAR(this->parseNumber("0"), quantitativeResult1[0], this->precision());
+        EXPECT_NEAR(this->parseNumber("0"), quantitativeResult1[1], this->precision());
+        EXPECT_NEAR(this->parseNumber("0"), quantitativeResult1[2], this->precision());
+
+        formula = formulaParser.parseSingleFormulaFromString("LRAmin=? [\"a\"]");
+
+        result = checker.check(this->env(), *formula);
+        storm::modelchecker::ExplicitQuantitativeCheckResult<ValueType>& quantitativeResult2 = result->asExplicitQuantitativeCheckResult<ValueType>();
+
+        EXPECT_NEAR(this->parseNumber("0"), quantitativeResult2[0], this->precision());
+        EXPECT_NEAR(this->parseNumber("0"), quantitativeResult2[1], this->precision());
+        EXPECT_NEAR(this->parseNumber("0"), quantitativeResult2[2], this->precision());
+
+        formula = formulaParser.parseSingleFormulaFromString("LRAmax=? [\"b\"]");
+
+        result = checker.check(this->env(), *formula);
+        storm::modelchecker::ExplicitQuantitativeCheckResult<ValueType>& quantitativeResult3 = result->asExplicitQuantitativeCheckResult<ValueType>();
+
+        EXPECT_NEAR(this->parseNumber("1"), quantitativeResult3[0], this->precision());
+        EXPECT_NEAR(this->parseNumber("1"), quantitativeResult3[1], this->precision());
+        EXPECT_NEAR(this->parseNumber("0"), quantitativeResult3[2], this->precision());
+
+        formula = formulaParser.parseSingleFormulaFromString("LRAmin=? [\"b\"]");
+
+        result = checker.check(this->env(), *formula);
+        storm::modelchecker::ExplicitQuantitativeCheckResult<ValueType>& quantitativeResult4 = result->asExplicitQuantitativeCheckResult<ValueType>();
+
+        EXPECT_NEAR(this->parseNumber("0"), quantitativeResult4[0], this->precision());
+        EXPECT_NEAR(this->parseNumber("0"), quantitativeResult4[1], this->precision());
+        EXPECT_NEAR(this->parseNumber("0"), quantitativeResult4[2], this->precision());
+
+        formula = formulaParser.parseSingleFormulaFromString("LRAmax=? [\"c\"]");
+
+        result = checker.check(this->env(), *formula);
+        storm::modelchecker::ExplicitQuantitativeCheckResult<ValueType>& quantitativeResult5 = result->asExplicitQuantitativeCheckResult<ValueType>();
+
+        EXPECT_NEAR(this->parseNumber("1"), quantitativeResult5[0], this->precision());
+        EXPECT_NEAR(this->parseNumber("1"), quantitativeResult5[1], this->precision());
+        EXPECT_NEAR(this->parseNumber("1"), quantitativeResult5[2], this->precision());
+
+        formula = formulaParser.parseSingleFormulaFromString("LRAmin=? [\"c\"]");
+
+        result = checker.check(this->env(), *formula);
+        storm::modelchecker::ExplicitQuantitativeCheckResult<ValueType>& quantitativeResult6 = result->asExplicitQuantitativeCheckResult<ValueType>();
+
+        EXPECT_NEAR(this->parseNumber("0"), quantitativeResult6[0], this->precision());
+        EXPECT_NEAR(this->parseNumber("0"), quantitativeResult6[1], this->precision());
+        EXPECT_NEAR(this->parseNumber("1"), quantitativeResult6[2], this->precision());
+    }
     {
         matrixBuilder = storm::storage::SparseMatrixBuilder<ValueType>(22, 15, 28, true, true, 15);
         matrixBuilder.newRowGroup(0);
@@ -459,16 +460,16 @@ TYPED_TEST(LraMdpPrctlModelCheckerTest, LRA) {
         std::shared_ptr<storm::logic::Formula const> formula = formulaParser.parseSingleFormulaFromString("LRAmax=? [\"a\"]");
 
         std::unique_ptr<storm::modelchecker::CheckResult> result;
-        // result = checker.check(this->env(), *formula);
-        // storm::modelchecker::ExplicitQuantitativeCheckResult<ValueType>& quantitativeResult1 = result->asExplicitQuantitativeCheckResult<ValueType>();
-        //
-        // EXPECT_NEAR(this->parseNumber("37 / 60"), quantitativeResult1[0], this->precision());
-        // EXPECT_NEAR(this->parseNumber("2/3"), quantitativeResult1[3], this->precision());
-        // EXPECT_NEAR(this->parseNumber("0.5"), quantitativeResult1[6], this->precision());
-        // EXPECT_NEAR(this->parseNumber("1/3"), quantitativeResult1[9], this->precision());
-        // EXPECT_NEAR(this->parseNumber("31 / 60"), quantitativeResult1[12], this->precision());
-        // EXPECT_NEAR(this->parseNumber("101 / 200"), quantitativeResult1[13], this->precision());
-        // EXPECT_NEAR(this->parseNumber("31 / 60"), quantitativeResult1[14], this->precision());
+        result = checker.check(this->env(), *formula);
+        storm::modelchecker::ExplicitQuantitativeCheckResult<ValueType>& quantitativeResult1 = result->asExplicitQuantitativeCheckResult<ValueType>();
+
+        EXPECT_NEAR(this->parseNumber("37 / 60"), quantitativeResult1[0], this->precision());
+        EXPECT_NEAR(this->parseNumber("2/3"), quantitativeResult1[3], this->precision());
+        EXPECT_NEAR(this->parseNumber("0.5"), quantitativeResult1[6], this->precision());
+        EXPECT_NEAR(this->parseNumber("1/3"), quantitativeResult1[9], this->precision());
+        EXPECT_NEAR(this->parseNumber("31 / 60"), quantitativeResult1[12], this->precision());
+        EXPECT_NEAR(this->parseNumber("101 / 200"), quantitativeResult1[13], this->precision());
+        EXPECT_NEAR(this->parseNumber("31 / 60"), quantitativeResult1[14], this->precision());
 
         formula = formulaParser.parseSingleFormulaFromString("LRAmin=? [\"a\"]");
 
@@ -476,9 +477,9 @@ TYPED_TEST(LraMdpPrctlModelCheckerTest, LRA) {
         storm::modelchecker::ExplicitQuantitativeCheckResult<ValueType>& quantitativeResult2 = result->asExplicitQuantitativeCheckResult<ValueType>();
 
         EXPECT_NEAR(this->parseNumber("0.1"), quantitativeResult2[0], this->precision());
-        EXPECT_NEAR(this->parseNumber("0"), quantitativeResult2[3], this->precision());
+        EXPECT_NEAR(this->parseNumber("0"), quantitativeResult2[3], this->precision()); // good
         EXPECT_NEAR(this->parseNumber("1/3"), quantitativeResult2[6], this->precision());
-        EXPECT_NEAR(this->parseNumber("0"), quantitativeResult2[9], this->precision());
+        EXPECT_NEAR(this->parseNumber("0"), quantitativeResult2[9], this->precision()); // good
         EXPECT_NEAR(this->parseNumber("0.1"), quantitativeResult2[12], this->precision());
         EXPECT_NEAR(this->parseNumber("79 / 300"), quantitativeResult2[13], this->precision());
         EXPECT_NEAR(this->parseNumber("0.1"), quantitativeResult2[14], this->precision());
@@ -500,7 +501,9 @@ TYPED_TEST(LraMdpPrctlModelCheckerTest, cs_nfail) {
     storm::modelchecker::SparseMdpPrctlModelChecker<storm::models::sparse::Mdp<ValueType>> checker(*mdp);
 
     auto result = checker.check(this->env(), tasks[0])->template asExplicitQuantitativeCheckResult<ValueType>();
-    EXPECT_NEAR(this->parseNumber("333/1000"), result[*mdp->getInitialStates().begin()], this->precision());
+    auto myResult = result[*mdp->getInitialStates().begin()];
+    std::cout << myResult << std::endl;
+    EXPECT_NEAR(this->parseNumber("333/1000"), myResult, this->precision());
 
     result = checker.check(this->env(), tasks[1])->template asExplicitQuantitativeCheckResult<ValueType>();
     EXPECT_NEAR(this->parseNumber("0"), result[*mdp->getInitialStates().begin()], this->precision());

@@ -372,6 +372,8 @@ std::vector<ValueType> SparseDeterministicInfiniteHorizonHelper<ValueType>::comp
                 biasSumPrecalculated += entryValue * biases[entry.getColumn()];
             }
         }
+        std::cout << stateValuesGetter(globalState) << std::endl;
+        std::cout << actionValuesGetter(globalState) << std::endl;
         eqSysVector.push_back(biasSumPrecalculated + stateValuesGetter(globalState) + actionValuesGetter(globalState) - gains[globalState]);
     }
     auto matrix = builder.build();
@@ -434,7 +436,7 @@ std::pair<std::vector<ValueType>, std::vector<ValueType>> SparseDeterministicInf
         } // step 4
     }
 
-    for (unsigned long i = 0; i < m; --i) {
+    for (unsigned long i = 0; i < m; ++i) {
         if (i > 0) {
             for (auto s : sccDecompNoBscc[i-1]) { S_lt.insert(s); } // Step 6 (the order is shuffled for performance reasons)
         }
@@ -475,19 +477,19 @@ std::pair<std::vector<ValueType>, std::vector<ValueType>> SparseDeterministicInf
 
     // To account for the transient states, we take the topo sort.
     // We can then calculate the gain and bias by simply filling out the equations.
-    auto topoSort = storm::utility::graph::getTopologicalSort(this->_transitionMatrix);
-    for (auto state : topoSort) {
-        if (transientStates.contains(state)) {
-            auto successorGainSum = storm::utility::zero<ValueType>();
-            auto successorBiasSum = storm::utility::zero<ValueType>();
-            for (const auto& entry : this->_transitionMatrix.getRow(state)) {
-                successorGainSum += entry.getValue() * gains[entry.getColumn()];
-                successorBiasSum += entry.getValue() * biases[entry.getColumn()];
-            }
-            gains[state] = successorGainSum;
-            biases[state] = successorBiasSum + stateValuesGetter(state) + actionValuesGetter(state);
-        }
-    }
+    // auto topoSort = storm::utility::graph::getTopologicalSort(this->_transitionMatrix);
+    // for (auto state : topoSort) {
+    //     if (transientStates.contains(state)) {
+    //         auto successorGainSum = storm::utility::zero<ValueType>();
+    //         auto successorBiasSum = storm::utility::zero<ValueType>();
+    //         for (const auto& entry : this->_transitionMatrix.getRow(state)) {
+    //             successorGainSum += entry.getValue() * gains[entry.getColumn()];
+    //             successorBiasSum += entry.getValue() * biases[entry.getColumn()];
+    //         }
+    //         gains[state] = successorGainSum;
+    //         biases[state] = successorBiasSum + stateValuesGetter(state) + actionValuesGetter(state);
+    //     }
+    // }
 
     return std::pair<std::vector<ValueType>, std::vector<ValueType>>(gains, biases);
 }

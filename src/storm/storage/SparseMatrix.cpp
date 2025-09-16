@@ -2409,13 +2409,14 @@ std::ostream& operator<<(std::ostream& out, SparseMatrix<ValueType> const& matri
 template<typename ValueType>
 void SparseMatrix<ValueType>::printAsMatlabMatrix(std::ostream& out) const {
     // Iterate over all row groups.
+    typename SparseMatrix<ValueType>::index_type rowGroupCounter = 0;
     for (typename SparseMatrix<ValueType>::index_type group = 0; group < this->getRowGroupCount(); ++group) {
-        STORM_LOG_ASSERT(this->getRowGroupSize(group) == 1, "Incorrect row group size.");
+        //STORM_LOG_ASSERT(this->getRowGroupSize(group) == 1, "Incorrect row group size.");
         for (typename SparseMatrix<ValueType>::index_type i = this->getRowGroupIndices()[group]; i < this->getRowGroupIndices()[group + 1]; ++i) {
             typename SparseMatrix<ValueType>::index_type nextIndex = this->rowIndications[i];
 
             // Print the actual row.
-            out << i << "\t(";
+            out << rowGroupCounter << "\t" << i << "\t(";
             typename SparseMatrix<ValueType>::index_type currentRealIndex = 0;
             while (currentRealIndex < this->columnCount) {
                 if (nextIndex < this->rowIndications[i + 1] && currentRealIndex == this->columnsAndValues[nextIndex].getColumn()) {
@@ -2428,6 +2429,7 @@ void SparseMatrix<ValueType>::printAsMatlabMatrix(std::ostream& out) const {
             }
             out << ";\n";
         }
+        rowGroupCounter++;
     }
 }
 
