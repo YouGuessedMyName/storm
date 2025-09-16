@@ -277,46 +277,30 @@ pair<bool, storm::storage::Scheduler<ValueType>> SparseNondeterministicInfiniteH
                                                                                      ValueGetter const& actionRewardsGetter,
                                                                                      storm::storage::MaximalEndComponent const& mec,
                                                                                      storm::storage::Scheduler<ValueType> scheduler,
-                                                                                     std::map<unsigned long, ValueType> const& stateToBiasMap) {
-    /* Bias improvement (step 6). Go over every state and see if it could be improved.
-     * If it is improved, then update the scheduler and schedulerWasChanged.
-     */
+                                                                                     std::map<uint64_t, ValueType> const& stateToBiasMap) {
+    // We consider all possible choices and see if we can greedily improve the bias for a state, basically an implementation of arg max.
     bool schedulerWasChanged = false;
-    for (const unsigned long& state : mec.getStateSet()) {
-        // Implementing arg max myself, is there a better way to do this?
+    for (const uint64_t& state : mec.getStateSet()) {
         auto stateRowIndex = this->_transitionMatrix.getRowGroupIndices()[state];
-        storm::storage::FlatSet<unsigned long> choices = mec.getChoicesForState(state);
-
-        auto previousOffset = scheduler.getChoice(state).getDeterministicChoice();
-        //cout << state << endl;
-
-        unsigned long bestOffset = 0;
+        storm::storage::FlatSet<uint64_t> choices = mec.getChoicesForState(state);
+        auto previousOffset = scheduler.getChoice(state).getDeterministicChoice(); // If nothing better than this choice is found, we keep it like it is.
+        uint64_t bestOffset = 0;
         ValueType bestScore;
-        if (false) {
-            bestScore = storm::utility::infinity<ValueType>();
-        } else {
-            bestScore = - storm::utility::infinity<ValueType>();
-        }
+        bestScore = - storm::utility::infinity<ValueType>();
 
         for (auto succRowIndex : choices) {
-            auto succRow = this->_transitionMatrix.getRow(succRowIndex); // Get the row for this choice (i.e. the prob. dist. of succs.)
-            // Now take the weighted sum over the successor's bias
-            ValueType sum = storm::utility::zero<ValueType>();
-            // << sum << endl;
-            for (auto succ : succRow) {
+            auto succRow = this->_transitionMatrix.getRow(succRowIndex);
+            auto sum = storm::utility::zero<ValueType>();
+            for (const auto& succ : succRow) {
                 ValueType p = succ.getValue();
                 auto succCol = succ.getColumn();
-                auto bias = stateToBiasMap.at(succCol);
-                sum = sum + p * bias; //+ stateRewardsGetter(succCol); // TODO is this the correct input to stateRewardsGetter?
-                //cout << bias << endl;
+                const auto& bias = stateToBiasMap.at(succCol);
+                sum = sum + p * bias;
             }
             auto currentOffset = succRowIndex - stateRowIndex;
             auto currentScore = actionRewardsGetter(succRowIndex) + sum;
             // Save the best choice and score, with preference for the previous choice if possible.
-            if (    (false &&
-                        (currentScore < bestScore || (currentScore <= bestScore && currentOffset == previousOffset))) ||
-                    (true &&
-                        (currentScore > bestScore || (currentScore >= bestScore && currentOffset == previousOffset))) ) {
+            if (currentScore > bestScore || (currentScore >= bestScore && currentOffset == previousOffset)) {
                 bestOffset = currentOffset;
                 bestScore = currentScore;
             }
@@ -324,7 +308,6 @@ pair<bool, storm::storage::Scheduler<ValueType>> SparseNondeterministicInfiniteH
         if (bestOffset != previousOffset) {
             schedulerWasChanged = true;
             scheduler.setChoice(bestOffset, state);
-            cout << state << " -> " << bestOffset << endl; // TODO remove, for easier debugging.
         }
     }
     return std::pair<bool, storm::storage::Scheduler<ValueType>>(schedulerWasChanged, scheduler);
@@ -332,80 +315,71 @@ pair<bool, storm::storage::Scheduler<ValueType>> SparseNondeterministicInfiniteH
 
 template<typename ValueType>
 pair<bool, storm::storage::Scheduler<ValueType>> SparseNondeterministicInfiniteHorizonHelper<ValueType>::gainImprovementStep(Environment const& env, storm::storage::Scheduler<ValueType> scheduler,
-        std::map<unsigned long, ValueType> stateToGainMap, storm::storage::MaximalEndComponent const& mec) {
+        std::map<uint64_t, ValueType> stateToGainMap, storm::storage::MaximalEndComponent const& mec) {
+    // We consider all possible choices and see if we can greedily improve the gain for a state, basically an implementation of arg max.
     bool schedulerWasChanged = false;
-    for (const unsigned long& state : mec.getStateSet()) {
+    for (const uint64_t& state : mec.getStateSet()) {
         auto stateRowIndex = this->_transitionMatrix.getRowGroupIndices()[state];
-        storm::storage::FlatSet<unsigned long> choices = mec.getChoicesForState(state);
+        storm::storage::FlatSet<uint64_t> choices = mec.getChoicesForState(state);
+        auto previousOffset = scheduler.getChoice(state).getDeterministicChoice(); // If nothing better than this choice is found, we keep it like it is.
 
-        auto previousOffset = scheduler.getChoice(state).getDeterministicChoice();
-        //cout << state << endl;
-
-        unsigned long bestOffset = 0;
+        uint64_t bestOffset = 0;
         ValueType bestScore;
-        if (false) {
-            bestScore = storm::utility::infinity<ValueType>();
-        } else {
-            bestScore = - storm::utility::infinity<ValueType>();
-        }
+        bestScore = - storm::utility::infinity<ValueType>();
 
         for (auto succRowIndex : choices) {
-            auto succRow = this->_transitionMatrix.getRow(succRowIndex); // Get the row for this choice (i.e. the prob. dist. of succs.)
-            // Now take the weighted sum over the successor's bias
-            ValueType sum = storm::utility::zero<ValueType>();
-            // << sum << endl;
-            for (auto succ : succRow) {
+            auto succRow = this->_transitionMatrix.getRow(succRowIndex);
+            auto sum = storm::utility::zero<ValueType>();
+            for (const auto& succ : succRow) {
                 ValueType p = succ.getValue();
                 auto succCol = succ.getColumn();
-                auto gain = stateToGainMap.at(succCol);
-                sum = sum + p * gain; // TODO is this the correct input to stateRewardsGetter?
-                //cout << bias << endl;
+                const auto& gain = stateToGainMap.at(succCol);
+                sum = sum + p * gain;
             }
             auto currentOffset = succRowIndex - stateRowIndex;
             auto currentScore = sum;
             // Save the best choice and score, with preference for the previous choice if possible.
-            if (    (false &&
-                        (currentScore < bestScore || (currentScore <= bestScore && currentOffset == previousOffset))) ||
-                    (true &&
-                        (currentScore > bestScore || (currentScore >= bestScore && currentOffset == previousOffset))) ) {
+            if (currentScore > bestScore || (currentScore >= bestScore && currentOffset == previousOffset) ) {
                 bestOffset = currentOffset;
                 bestScore = currentScore;
-                        }
+            }
         }
         if (bestOffset != previousOffset) {
             schedulerWasChanged = true;
             scheduler.setChoice(bestOffset, state);
-            cout << state << " -> " << bestOffset << endl; // TODO remove, for easier debugging.
         }
     }
     return std::pair<bool, storm::storage::Scheduler<ValueType>>(schedulerWasChanged, scheduler);
 }
 
-// Returns induced matrix after applying the scheduler and mec, and the corresponding ValueGetters.
+// Returns induced matrix after applying the scheduler and mec, and the corresponding ValueGetters that work properly with this matrix.
 template<typename ValueType>
-std::tuple<storm::storage::SparseMatrix<ValueType>, std::function<ValueType(uint64_t)>, std::function<ValueType(uint64_t)>> calculateInducedMatrix(storm::storage::SparseMatrix<ValueType> matrix,
+std::tuple<storm::storage::SparseMatrix<ValueType>, std::function<ValueType(uint64_t)>, std::function<ValueType(uint64_t)>> calculateInducedMatrix(const storm::storage::SparseMatrix<ValueType>& matrix,
         storm::storage::Scheduler<ValueType>& scheduler, storm::storage::MaximalEndComponent const& mec, \
         std::function<ValueType(uint64_t)> const& stateRewardsGetter, std::function<ValueType(uint64_t)> const& actionRewardsGetter,
         storm::solver::OptimizationDirection optimizationDirection, std::vector<uint64_t>& mecStatesVector, std::vector<uint64_t>& mecActionsVector) {
-    auto mecBitVector = storm::storage::BitVector(matrix.getRowGroupCount());
-    auto stateSet = mec.getStateSet(); // store it in a variable first
+
+    // mecStatesVector is a map from the states in deterministicMatrix to the states in matrix.
+    auto stateSet = mec.getStateSet(); // Need to store it in a variable first, otherwise it breaks...
     mecStatesVector = std::vector<uint64_t> (stateSet.begin(), stateSet.end());
     ranges::sort(mecStatesVector);
 
-    int index = 0;
+    // mecActionsVector is a map from the states in deterministicMatrix to the row of the action that was chosen in matrix.
+    uint64_t index = 0;
     for (const auto& state : mecStatesVector) {
         auto choice = scheduler.getChoice(state).getDeterministicChoice();
         mecActionsVector[index] = (matrix.getRowGroupIndices()[state] + choice);
         index++;
     }
 
+    // Create deterministicMatrix] by applying the scheduler, then getting the submatrix with only those states that are also in the MEC
+    auto mecBitVector = storm::storage::BitVector(matrix.getRowGroupCount());
     for (const auto& state : mec.getStateSet()) { mecBitVector.set(state); }
-    // We only keep the rows from the MEC, that avoids having three types of indices for the states.
     auto deterministicMatrix = storm::utility::matrix::applyScheduler(matrix, scheduler).getSubmatrix(false, mecBitVector, mecBitVector);
     std::unique_ptr<SparseDeterministicInfiniteHorizonHelper<ValueType>> helper;
-    // Modified reward getters for the restricted DTMC with only the states that were in the MEC.
-    // If we want to minimize the reward, then we have to flip the sign!
 
+    // We need to modify teh reward getters so that they are correct for deterministicMatrix instead of matrix.
+    // If we want to minimize the reward, then we flip the sign!
     std::function<ValueType(uint64_t)> inducedStateRewardsGetter, inducedActionRewardsGetter;
 
     if (optimizationDirection == storm::solver::OptimizationDirection::Minimize) {
@@ -427,92 +401,52 @@ std::tuple<storm::storage::SparseMatrix<ValueType>, std::function<ValueType(uint
     return std::tuple<storm::storage::SparseMatrix<ValueType>, std::function<ValueType(uint64_t)>, std::function<ValueType(uint64_t)>>(deterministicMatrix, inducedStateRewardsGetter, inducedActionRewardsGetter);
 }
 
-
-
-/*! HERE
- *
- * Implementation of calculating Lra using Policy iteration. Follows Algorithm 2 from https://doi.org/10.48550/arXiv.1707.01859 */
 template<typename ValueType>
 ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForMecPi(Environment const& env, ValueGetter const& stateRewardsGetter,
                                                                                      ValueGetter const& actionRewardsGetter,
                                                                                      storm::storage::MaximalEndComponent const& mec) {
-    /* Scheduler that will be improved over the course of the algorithm, picks a random state within the MEC for now
-      It maps states -> offsets which can be relative to the states or row groups (depends on the context). */
+    // Note that minimizing a reward is handled by making the rewards negative and maximizing over that.
+    // Initiate an arbitrary scheduler, in our case we start by picking the first action always.
     auto scheduler = storm::storage::Scheduler<ValueType>(this->_transitionMatrix.getRowGroupCount());
     for (int i = 0; i < this->_transitionMatrix.getRowGroupCount(); i++) { scheduler.setChoice(0, i); }
 
-    auto mecStatesVector = std::vector<uint64_t> (mec.size());
-    auto mecActionsVector = std::vector <uint64_t> (mec.size());
+    // We create a new matrix deterministicMatrix by applying the scheduler.
+    auto mecStatesVector = std::vector<uint64_t> (mec.size()); // Map from the states in deterministicMatrix to the states in this._transitionMatrix.
+    auto mecActionsVector = std::vector <uint64_t> (mec.size()); // Map from the states in deterministicMatrix to the row of the action that was chosen in this._transitionMatrix.
     auto [deterministicMatrix, inducedStateRewardsGetter, inducedActionRewardsGetter] = calculateInducedMatrix(
         this->_transitionMatrix, scheduler, mec, stateRewardsGetter, actionRewardsGetter, this->getOptimizationDirection(), mecStatesVector, mecActionsVector);
     auto helper = std::make_unique<SparseDeterministicInfiniteHorizonHelper<ValueType>>(deterministicMatrix);
 
-    /* Map from state number (column number) -> gain/bias */
-    std::map<unsigned long, ValueType> stateToGainMap;
-    std::map<unsigned long, ValueType> stateToBiasMap;
-    std::map<unsigned long, unsigned long> stateMecIndexMap; // state -> index in scc. Only used for calculating stateToBiasMap.
-    unsigned long bsccIndex = 0;
-    for (const auto& key : mec.getStateSet()) { stateMecIndexMap[key] = bsccIndex; bsccIndex++; }
+    // Maps from states in this._transitionMatrix to their respective gains and biases.
+    std::map<uint64_t, ValueType> stateToGainMap;
+    std::map<uint64_t, ValueType> stateToBiasMap;
+    std::map<uint64_t, uint64_t> stateMecIndexMap; // state -> index in scc. Only used for calculating stateToGainMap and stateToBiasMap.
+    uint64_t bsccIndex = 0; for (const auto& key : mec.getStateSet()) { stateMecIndexMap[key] = bsccIndex; bsccIndex++; }
 
     int n = 0; cout << endl;
     while (true) {
-        cout << n << " -----------------------------" << endl;
-        // scheduler.printToStream(cout);
-        // cout << endl;
-        //
-        // cout << - stateRewardsGetter(7) << endl;
-        // if (n >= 1000) {
-        //     auto mecBitVector = storm::storage::BitVector(this->_transitionMatrix.getRowGroupCount());
-        //     auto stateSet = mec.getStateSet(); // store it in a variable first
-        //     for (const auto& state : mec.getStateSet()) { mecBitVector.set(state); }
-        //     // We only keep the rows from the MEC, that avoids having three types of indices for the states.
-        //     auto restrictedMatrix = this->_transitionMatrix.getSubmatrix(true, mecBitVector, mecBitVector);
-        //     cout << "restrictedMatrix" << endl;
-        //     restrictedMatrix.printAsMatlabMatrix(cout);
-        //     cout << "deterministicMatrix" << endl;
-        //     deterministicMatrix.printAsMatlabMatrix(cout);
-        //     cout << "Choices' action rewards" << endl;
-        //     for (auto [state, choices] : mec) {
-        //         for (const auto& choice : choices) {
-        //             cout << state << " " << choice << " " << actionRewardsGetter(choice) << endl;
-        //         }
-        //     }
-        //     cout << "Induced action rewards" << endl;
-        //     for (int i = 0; i < deterministicMatrix.getColumnCount(); i++) {
-        //         cout << i << " " << inducedActionRewardsGetter(i) << endl;
-        //     }
-        //     cout << "State rewards global" << endl;
-        //     for (auto state : mec | std::views::keys) {
-        //         cout << state << " " << stateRewardsGetter(state) << endl;
-        //     }
-        //     cout << "State rewards local" << endl;
-        //     for (unsigned long i = 0; i < deterministicMatrix.getColumnCount(); i++) {
-        //         cout << i << " " << inducedStateRewardsGetter(i) << endl;
-        //     }
-        //
-        //     cout << endl;
-        // }
+        //cout << n << " -----------------------------" << endl; // For debugging
 
-        auto [gains, biases] = helper->computeLraGainBias(env, inducedStateRewardsGetter, inducedActionRewardsGetter);
+        auto [gains, biases] = helper->computeLraGainBias(env, inducedStateRewardsGetter, inducedActionRewardsGetter); // Line 2
         for (const auto& [state, mecIndex] : stateMecIndexMap) {
             stateToGainMap[state] = gains[mecIndex];
             stateToBiasMap[state] = biases[mecIndex];
         }
 
-        auto [schedulerChangedGain, newSchedulerGain] = this->gainImprovementStep(env, scheduler, stateToGainMap, mec); // Step 3
+        auto [schedulerChangedGain, newSchedulerGain] = this->gainImprovementStep(env, scheduler, stateToGainMap, mec); // Line 3-4
         if (schedulerChangedGain) { // Step 4-5
             scheduler = newSchedulerGain;
             std::tie(deterministicMatrix, inducedStateRewardsGetter, inducedActionRewardsGetter) = calculateInducedMatrix(this->_transitionMatrix, scheduler, mec, stateRewardsGetter, actionRewardsGetter, this->getOptimizationDirection(), mecStatesVector, mecActionsVector);
-            helper = std::make_unique<SparseDeterministicInfiniteHorizonHelper<ValueType>>(deterministicMatrix); // TODO this may be unnecessary, investigate later!
+            helper = std::make_unique<SparseDeterministicInfiniteHorizonHelper<ValueType>>(deterministicMatrix);
             n++;
             continue;
         }
 
-        auto [schedulerChanged, newScheduler] = this->biasImprovementStep(env, stateRewardsGetter, actionRewardsGetter, mec, scheduler, stateToBiasMap); // Step 6
+        auto [schedulerChanged, newScheduler] = this->biasImprovementStep(env, stateRewardsGetter, actionRewardsGetter, mec, scheduler, stateToBiasMap); // Line 6-7
         if (schedulerChanged) {
             scheduler = newScheduler;
             std::tie(deterministicMatrix, inducedStateRewardsGetter, inducedActionRewardsGetter) = calculateInducedMatrix(this->_transitionMatrix, scheduler, mec, stateRewardsGetter, actionRewardsGetter, this->getOptimizationDirection(), mecStatesVector, mecActionsVector);
-            helper = std::make_unique<SparseDeterministicInfiniteHorizonHelper<ValueType>>(deterministicMatrix); // TODO this may be unnecessary, investigate later!
+            helper = std::make_unique<SparseDeterministicInfiniteHorizonHelper<ValueType>>(deterministicMatrix);
             n++;
         } else {
             // We just return the first gain since they should all be the same in a MEC, we need to flip the sign again if we were minimizing.
@@ -523,48 +457,49 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
             else {
                 resFactor = storm::utility::one<ValueType>();
             }
-            double valueIterationResult = storm::utility::convertNumber<double>(computeLraForMecVi(env, stateRewardsGetter, actionRewardsGetter, mec));
             ValueType exactResult = resFactor * gains[0];
-            double roundedResult = storm::utility::convertNumber<double>(exactResult);
-            auto diff = roundedResult - valueIterationResult;
-            if (diff > 1e-5 || diff < -1e-5) {
-                auto mecBitVector = storm::storage::BitVector(this->_transitionMatrix.getRowGroupCount());
-                auto stateSet = mec.getStateSet(); // store it in a variable first
-                // mecStatesVector = std::vector<uint64_t> (stateSet.begin(), stateSet.end());
-                //
-                // ranges::sort(mecStatesVector);
-                for (const auto& state : mec.getStateSet()) { mecBitVector.set(state); }
-                // We only keep the rows from the MEC, that avoids having three types of indices for the states.
-                auto restrictedMatrix = this->_transitionMatrix.getSubmatrix(true, mecBitVector, mecBitVector);
-
-                cout << "VI: " << valueIterationResult << " PI: " << roundedResult << endl;
-
-                cout << "restrictedMatrix" << endl;
-                restrictedMatrix.printAsMatlabMatrix(cout);
-                cout << "deterministicMatrix" << endl;
-                deterministicMatrix.printAsMatlabMatrix(cout);
-                cout << "Choices' action rewards" << endl;
-                for (auto [state, choices] : mec) {
-                    for (const auto& choice : choices) {
-                        auto it = stateMecIndexMap.find( state);
-                        cout << it->second << " " << state << " " << choice << " " << actionRewardsGetter(choice) << endl;
-                    }
-                }
-                cout << "State, chosen offset, action row, rewards" << endl;
-                for (int i = 0; i < deterministicMatrix.getColumnCount(); i++) {
-                    cout << i << " " << scheduler.getChoice(i).getDeterministicChoice() << " " << mecActionsVector[i] << " " << inducedActionRewardsGetter(i) << endl;
-                }
-                cout << "State rewards global" << endl;
-                for (auto state : mec | std::views::keys) {
-                    cout << state << " " << stateRewardsGetter(state) << endl;
-                }
-                cout << "State rewards local" << endl;
-                for (int i = 0; i < deterministicMatrix.getColumnCount(); i++) {
-                    cout << i << " " << inducedStateRewardsGetter(i) << endl;
-                }
-
-                cout << endl;
-            }
+            // Very useful for debugging, PLEASE DO NOT REMOVE
+            // double valueIterationResult = storm::utility::convertNumber<double>(computeLraForMecVi(env, stateRewardsGetter, actionRewardsGetter, mec));
+            // double roundedResult = storm::utility::convertNumber<double>(exactResult);
+            // auto diff = roundedResult - valueIterationResult;
+            // if (diff > 1e-5 || diff < -1e-5) {
+            //     auto mecBitVector = storm::storage::BitVector(this->_transitionMatrix.getRowGroupCount());
+            //     auto stateSet = mec.getStateSet(); // store it in a variable first
+            //     // mecStatesVector = std::vector<uint64_t> (stateSet.begin(), stateSet.end());
+            //     //
+            //     // ranges::sort(mecStatesVector);
+            //     for (const auto& state : mec.getStateSet()) { mecBitVector.set(state); }
+            //     // We only keep the rows from the MEC, that avoids having three types of indices for the states.
+            //     auto restrictedMatrix = this->_transitionMatrix.getSubmatrix(true, mecBitVector, mecBitVector);
+            //
+            //     cout << "VI: " << valueIterationResult << " PI: " << roundedResult << endl;
+            //
+            //     cout << "restrictedMatrix" << endl;
+            //     restrictedMatrix.printAsMatlabMatrix(cout);
+            //     cout << "deterministicMatrix" << endl;
+            //     deterministicMatrix.printAsMatlabMatrix(cout);
+            //     cout << "Choices' action rewards" << endl;
+            //     for (auto [state, choices] : mec) {
+            //         for (const auto& choice : choices) {
+            //             auto it = stateMecIndexMap.find( state);
+            //             cout << it->second << " " << state << " " << choice << " " << actionRewardsGetter(choice) << endl;
+            //         }
+            //     }
+            //     cout << "State, chosen offset, action row, rewards" << endl;
+            //     for (int i = 0; i < deterministicMatrix.getColumnCount(); i++) {
+            //         cout << i << " " << scheduler.getChoice(i).getDeterministicChoice() << " " << mecActionsVector[i] << " " << inducedActionRewardsGetter(i) << endl;
+            //     }
+            //     cout << "State rewards global" << endl;
+            //     for (auto state : mec | std::views::keys) {
+            //         cout << state << " " << stateRewardsGetter(state) << endl;
+            //     }
+            //     cout << "State rewards local" << endl;
+            //     for (int i = 0; i < deterministicMatrix.getColumnCount(); i++) {
+            //         cout << i << " " << inducedStateRewardsGetter(i) << endl;
+            //     }
+            //
+            //     cout << endl;
+            // }
             return exactResult;
         }
         n++;

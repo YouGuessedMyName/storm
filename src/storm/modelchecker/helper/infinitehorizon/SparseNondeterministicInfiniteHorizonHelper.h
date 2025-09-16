@@ -82,6 +82,10 @@ class SparseNondeterministicInfiniteHorizonHelper : public SparseInfiniteHorizon
                                  storm::storage::MaximalEndComponent const& mec);
 
 
+    /*!
+     * As computeLraForMec but uses policy/strategy iteration.
+     * @see Algorithm 1 in Kretinsky and Meggendorfer (2017): https://doi.org/10.48550/arXiv.1707.01859
+     */
     ValueType computeLraForMecPi(Environment const& env, ValueGetter const& stateValuesGetter, ValueGetter const& actionValuesGetter,
                                  storm::storage::MaximalEndComponent const& mec);
 
@@ -106,11 +110,19 @@ class SparseNondeterministicInfiniteHorizonHelper : public SparseInfiniteHorizon
      */
     virtual std::vector<ValueType> buildAndSolveSsp(Environment const& env, std::vector<ValueType> const& mecLraValues) override;
 
+    /*!
+     * Performs a single bias improvement step, see Algorithm 1, line 6-7 from Kretinsky and Meggendorfer (2017): https://doi.org/10.48550/arXiv.1707.01859.
+     * Returns a bool that indicates whether the scheduler was changed, and the new scheduler.
+     */
     std::pair<bool, storm::storage::Scheduler<ValueType>> biasImprovementStep(Environment const& env, ValueGetter const& stateRewardsGetter,
                                                                                      ValueGetter const& actionRewardsGetter,
                                                                                      storm::storage::MaximalEndComponent const& mec,
                                                                                      storm::storage::Scheduler<ValueType> scheduler,
                                                                                      std::map<unsigned long, ValueType> const& stateToBiasMap);
+    /*!
+     * Performs a single gain improvemen, see Algorithm 1, line 3-4 from Kretinsky and Meggendorfer (2017): https://doi.org/10.48550/arXiv.1707.01859
+     * Returns a bool that indicates whether the scheduler was changed, and the new scheduler.
+     */
     std::pair<bool, storage::Scheduler<ValueType>> gainImprovementStep(Environment const& env, storage::Scheduler<ValueType> scheduler,
                                                                        std::map<unsigned long, ValueType> gainToBiasMap, storm::storage::MaximalEndComponent const& mec);
 };
