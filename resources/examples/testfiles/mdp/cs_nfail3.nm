@@ -71,4 +71,14 @@ rewards "grants"
 	[client3_grant] true : 1;
 endrewards
 
+rewards "grants1"
+        [client1_grant] true : 1;
+endrewards
 
+rewards "grants2"
+        [client2_grant] true : 1;
+endrewards
+
+rewards "grants3"
+        [client3_grant] true : 1;
+endrewards

@@ -31,7 +31,7 @@ LongRunAverageSolverSettings::LongRunAverageSolverSettings() : ModuleSettings(mo
                                          .build())
                         .build());
 
-    std::vector<std::string> nondetLraMethods = {"vi", "value-iteration", "linear-programming", "lp"};
+    std::vector<std::string> nondetLraMethods = {"vi", "value-iteration", "linear-programming", "lp", "policy-iteration", "pi"};
     this->addOption(storm::settings::OptionBuilder(moduleName, nondetLraMethodOptionName, true,
                                                    "Sets which method is preferred for computing long run averages on models with nondeterminism.")
                         .setIsAdvanced()
@@ -82,6 +82,9 @@ storm::solver::LraMethod LongRunAverageSolverSettings::getDetLraMethod() const {
     if (lraMethodString == "value-iteration" || lraMethodString == "vi") {
         return storm::solver::LraMethod::ValueIteration;
     }
+    if (lraMethodString == "policy-iteration" || lraMethodString == "pi") {
+        return storm::solver::LraMethod::PolicyIteration;
+    }
     STORM_LOG_THROW(false, storm::exceptions::IllegalArgumentValueException,
                     "Unknown lra solving technique for deterministic models:'" << lraMethodString << "'.");
 }
@@ -97,6 +100,9 @@ storm::solver::LraMethod LongRunAverageSolverSettings::getNondetLraMethod() cons
         return storm::solver::LraMethod::ValueIteration;
     } else if (lraMethodString == "linear-programming" || lraMethodString == "lp") {
         return storm::solver::LraMethod::LinearProgramming;
+    }
+    if (lraMethodString == "policy-iteration" || lraMethodString == "pi") {
+        return storm::solver::LraMethod::PolicyIteration;
     }
     STORM_LOG_THROW(false, storm::exceptions::IllegalArgumentValueException,
                     "Unknown lra solving technique for nondeterministic models:'" << lraMethodString << "'.");

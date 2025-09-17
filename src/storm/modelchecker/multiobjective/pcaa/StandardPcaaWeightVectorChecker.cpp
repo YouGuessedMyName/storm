@@ -373,7 +373,9 @@ void StandardPcaaWeightVectorChecker<SparseModelType>::infiniteHorizonWeightedPh
         } else {
             stateValueGetter = [](uint64_t const&) { return storm::utility::zero<ValueType>(); };
         }
+        std::cout << "MEC INDEX: " << mecIndex  << " / " << lraMecDecomposition->mecs.size() << std::endl;
         lraMecDecomposition->auxMecValues[mecIndex] = helper.computeLraForComponent(env, stateValueGetter, actionValueGetter, mec);
+        std::cout << "done iteration" << std::endl;
     }
     // Extract the produced optimal choices for the MECs
     this->optimalChoices = std::move(helper.getProducedOptimalChoices());

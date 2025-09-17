@@ -9,6 +9,8 @@
 #include "storm-parsers/api/properties.h"
 #include "storm/api/builder.h"
 #include "storm/api/properties.h"
+#include "storm/environment/modelchecker/ModelCheckerEnvironment.h"
+#include "storm/environment/modelchecker/MultiObjectiveModelCheckerEnvironment.h"
 
 #include "storm-parsers/parser/FormulaParser.h"
 #include "storm/logic/Formulas.h"
@@ -22,8 +24,13 @@
 
 #include "storm-parsers/parser/AutoParser.h"
 #include "storm/environment/solver/LongRunAverageSolverEnvironment.h"
+#include "storm/modelchecker/helper/infinitehorizon/SparseInfiniteHorizonHelper.h"
+#include "storm/modelchecker/multiobjective/MultiObjectiveModelCheckingMethod.h"
+#include "storm/modelchecker/multiobjective/multiObjectiveModelChecking.h"
+#include "storm/modelchecker/prctl/helper/rewardbounded/QuantileHelper.h"
+#include "storm/modelchecker/results/ExplicitQualitativeCheckResult.h"
 #include "storm/settings/modules/NativeEquationSolverSettings.h"
-
+#include "storm/modelchecker/helper/infinitehorizon/SparseNondeterministicInfiniteHorizonHelper.h"
 namespace {
 
 // class SparseValueTypeValueIterationEnvironment {
@@ -61,7 +68,7 @@ class SparseValueTypePolicyIterationEnvironment {
         storm::Environment env;
         env.solver().lra().setNondetLraMethod(storm::solver::LraMethod::PolicyIteration);
         env.solver().lra().setPrecision(storm::utility::convertNumber<storm::RationalNumber>(1e-10));
-        env.solver().setForceExact(true);
+        //env.solver().setForceExact(true);
         return env;
     }
 };
@@ -301,6 +308,53 @@ TYPED_TEST(LraMdpPrctlModelCheckerTest, LRA_SingleMec) {
         EXPECT_NEAR(this->parseNumber("0.5"), quantitativeResult6[1], this->precision());
         EXPECT_NEAR(this->parseNumber("0.5"), quantitativeResult6[2], this->precision());
     }
+    {
+        matrixBuilder = storm::storage::SparseMatrixBuilder<ValueType>(9, 3, 4, true, true, 3);
+        /*0	0	(0 0 0 ;
+        0	1	(0 0 0 ;
+        0	2	(0 1 0 ;
+        1	3	(0 0 0 ;
+        1	4	(0 0 1 ;
+        2	5	(0 0 1 ;
+        2	6	(0 0 0 ;
+        2	7	(1 0 0 ;
+        2	8	(0 0 0 ;
+        */
+        matrixBuilder.newRowGroup(0);
+        matrixBuilder.addNextValue(2, 1, this->parseNumber("1"));
+        matrixBuilder.newRowGroup(3);
+        matrixBuilder.addNextValue(4, 2, this->parseNumber("1"));
+        matrixBuilder.newRowGroup(5);
+        matrixBuilder.addNextValue(5, 2, this->parseNumber("1"));
+        matrixBuilder.addNextValue(7, 0, this->parseNumber("1"));
+        storm::storage::SparseMatrix<ValueType> transitionMatrix = matrixBuilder.build();
+
+        auto statesRewardGetter = [](uint64_t _) -> ValueType {
+            return 0;
+        };
+        auto actionRewardGetter = [](uint64_t row) -> ValueType {
+            if (row == 4) {
+                return 0.332103321;
+            }
+            return 0;
+        };
+        auto helper = storm::modelchecker::helper::SparseNondeterministicInfiniteHorizonHelper<double>(transitionMatrix);
+        storm::Environment env;
+        env.solver().lra().setNondetLraMethod(storm::solver::LraMethod::PolicyIteration);
+        env.solver().lra().setPrecision(storm::utility::convertNumber<storm::RationalNumber>(1e-10));
+
+        auto mec = storm::storage::MaximalEndComponent();
+        auto zeroChoices = storm::storage::FlatSet<uint64_t>(); zeroChoices.insert(2);
+        auto oneChoices = storm::storage::FlatSet<uint64_t>(); oneChoices.insert(4);
+        auto twoChoices = storm::storage::FlatSet<uint64_t>(); twoChoices.insert(5); twoChoices.insert(7);
+        mec.addState(0, zeroChoices);
+        mec.addState(1, oneChoices);
+        mec.addState(2, twoChoices);
+        helper.setOptimizationDirection(storm::OptimizationDirection::Maximize);
+        auto result = helper.computeLraForComponent(env, statesRewardGetter, actionRewardGetter, mec);
+        std::cout << result << std::endl;
+    }
+
 }
 
 TYPED_TEST(LraMdpPrctlModelCheckerTest, LRA) {
@@ -489,7 +543,7 @@ TYPED_TEST(LraMdpPrctlModelCheckerTest, LRA) {
 TYPED_TEST(LraMdpPrctlModelCheckerTest, cs_nfail) {
     typedef typename TestFixture::ValueType ValueType;
 
-    std::string formulasString = "R{\"grants\"}max=? [ MP ]; R{\"grants\"}min=? [ MP ];";
+    std::string formulasString = "R{\"grants\"}max=? [ MP ]; R{\"grants\"}min=? [ MP ]; R{\"grants1\"}>=0.02 [ S ];";
 
     auto modelFormulas = this->buildModelFormulas(STORM_TEST_RESOURCES_DIR "/mdp/cs_nfail3.nm", formulasString);
     auto model = std::move(modelFormulas.first);
@@ -507,6 +561,55 @@ TYPED_TEST(LraMdpPrctlModelCheckerTest, cs_nfail) {
 
     result = checker.check(this->env(), tasks[1])->template asExplicitQuantitativeCheckResult<ValueType>();
     EXPECT_NEAR(this->parseNumber("0"), result[*mdp->getInitialStates().begin()], this->precision());
+}
+
+TYPED_TEST(LraMdpPrctlModelCheckerTest, cs_nfail_multi) {
+    typedef typename TestFixture::ValueType ValueType;
+    storm::Environment env;
+    env.solver().lra().setNondetLraMethod(storm::solver::LraMethod::PolicyIteration);
+    //env.modelchecker().multi().setMethod(storm::modelchecker::multiobjective::MultiObjectiveMethod::ConstraintBased);
+
+    std::string programFile = STORM_TEST_RESOURCES_DIR "/mdp/cs_nfail3.nm";
+    std::string formulasAsString = "multi(R{\"grants1\"}>=0.02 [ S ], R{\"grants2\"}>=0.28 [ S ], R{\"grants3\"}>=0.028 [ S ])";;  // numerical
+
+    // programm, model,  formula
+    storm::prism::Program program = storm::api::parseProgram(programFile);
+    program = storm::utility::prism::preprocess(program, "");
+    std::vector<std::shared_ptr<storm::logic::Formula const>> formulas =
+        storm::api::extractFormulasFromProperties(storm::api::parsePropertiesForPrismProgram(formulasAsString, program));
+    std::shared_ptr<storm::models::sparse::Mdp<storm::RationalNumber>> mdp =
+        storm::api::buildSparseModel<storm::RationalNumber>(program, formulas)->as<storm::models::sparse::Mdp<storm::RationalNumber>>();
+    uint_fast64_t initState = *mdp->getInitialStates().begin();
+
+    std::unique_ptr<storm::modelchecker::CheckResult> result;
+    result =
+        storm::modelchecker::multiobjective::performMultiObjectiveModelChecking(env, *mdp, formulas[0]->asMultiObjectiveFormula());
+    ASSERT_TRUE(result->isExplicitQualitativeCheckResult());
+    EXPECT_TRUE(result->asExplicitQualitativeCheckResult()[initState]);
+
+    program = storm::api::parseProgram(programFile);
+    program = storm::utility::prism::preprocess(program, "");
+    formulasAsString = "multi(R{\"grants1\"}max=? [ S ], R{\"grants2\"}>=0.28 [ S ], R{\"grants3\"}>=0.028 [ S ])";
+    // programm, model,  formula
+    formulas = storm::api::extractFormulasFromProperties(storm::api::parsePropertiesForPrismProgram(formulasAsString, program));
+    mdp = storm::api::buildSparseModel<storm::RationalNumber>(program, formulas)->as<storm::models::sparse::Mdp<storm::RationalNumber>>();
+    initState = *mdp->getInitialStates().begin();
+
+    auto result2 = storm::modelchecker::multiobjective::performMultiObjectiveModelChecking(env, *mdp, formulas[0]->asMultiObjectiveFormula());
+    // //auto result3 = result2->asExplicitQuantitativeCheckResult<double>();
+    // ASSERT_TRUE(result2->isExplicitQuantitativeCheckResult());
+    // EXPECT_NEAR(this->parseNumber("0.025"), result2->asExplicitQuantitativeCheckResult<ValueType>()[initState], this->precision());
+
+    formulasAsString = "multi(R{\"grants1\"}max=? [ S ], R{\"grants2\"}max=? [ S ], R{\"grants3\"}max=? [ S ])";
+    // programm, model,  formula
+    formulas = storm::api::extractFormulasFromProperties(storm::api::parsePropertiesForPrismProgram(formulasAsString, program));
+    mdp = storm::api::buildSparseModel<storm::RationalNumber>(program, formulas)->as<storm::models::sparse::Mdp<storm::RationalNumber>>();
+    initState = *mdp->getInitialStates().begin();
+
+    auto result3 = storm::modelchecker::multiobjective::performMultiObjectiveModelChecking(env, *mdp, formulas[0]->asMultiObjectiveFormula());
+    //auto result3 = result2->asExplicitQuantitativeCheckResult<double>();
+    ASSERT_TRUE(result3->isExplicitQuantitativeCheckResult());
+    //EXPECT_NEAR(this->parseNumber("0.025"), result3->asExplicitQuantitativeCheckResult<ValueType>()[initState], this->precision());
 }
 
 }  // namespace
