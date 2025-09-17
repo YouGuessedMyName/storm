@@ -247,8 +247,8 @@ std::pair<ValueType, std::vector<ValueType>> SparseDeterministicInfiniteHorizonH
 }
 
 template <typename ValueType>
-std::map<ValueType, std::map<unsigned long, ValueType>> SparseDeterministicInfiniteHorizonHelper<ValueType>::computeGainProbabilities(Environment const& env,
-    std::map<ValueType, std::map<unsigned long, ValueType>> p, storm::storage::StronglyConnectedComponent scc, ValueType g, std::map<ValueType, storm::storage::FlatSet<uint64_t>> succgStates) {
+std::map<ValueType, std::map<uint64_t, ValueType>> SparseDeterministicInfiniteHorizonHelper<ValueType>::computeGainProbabilities(Environment const& env,
+    std::map<ValueType, std::map<uint64_t, ValueType>> p, storm::storage::StronglyConnectedComponent scc, ValueType g, std::map<ValueType, storm::storage::FlatSet<uint64_t>> succgStates) {
     // we want that the returned vector is sorted as the bscc. So let's assert that the bscc is sorted ascendingly.
     STORM_LOG_ASSERT(std::is_sorted(scc.begin(), scc.end()), "Expected that sccs are sorted.");
 
@@ -321,7 +321,7 @@ std::map<ValueType, std::map<unsigned long, ValueType>> SparseDeterministicInfin
 template <typename ValueType>
 std::vector<ValueType> SparseDeterministicInfiniteHorizonHelper<ValueType>::computeBiases(Environment const& env, ValueGetter const& stateValuesGetter,
     ValueGetter const& actionValuesGetter, std::vector<ValueType> biases, storm::storage::StronglyConnectedComponent scc,
-    storm::storage::FlatSet<unsigned long> S_lt, std::vector<ValueType> gains) {
+                                                                                          const storm::storage::FlatSet<uint64_t>& S_lt, std::vector<ValueType> gains) {
 
     // we want that the returned vector is sorted as the bscc. So let's assert that the bscc is sorted ascendingly.
     STORM_LOG_ASSERT(std::is_sorted(scc.begin(), scc.end()), "Expected that sccs are sorted.");
@@ -372,8 +372,6 @@ std::vector<ValueType> SparseDeterministicInfiniteHorizonHelper<ValueType>::comp
                 biasSumPrecalculated += entryValue * biases[entry.getColumn()];
             }
         }
-        std::cout << stateValuesGetter(globalState) << std::endl;
-        std::cout << actionValuesGetter(globalState) << std::endl;
         eqSysVector.push_back(biasSumPrecalculated + stateValuesGetter(globalState) + actionValuesGetter(globalState) - gains[globalState]);
     }
     auto matrix = builder.build();
@@ -388,7 +386,7 @@ std::vector<ValueType> SparseDeterministicInfiniteHorizonHelper<ValueType>::comp
 }
 
 template<typename ValueType>
-bool sccDecompositionContainsScc(storage::StronglyConnectedComponent scc, storage::StronglyConnectedComponentDecomposition<ValueType> sccDecomp) {
+bool sccDecompositionContainsScc(const storage::StronglyConnectedComponent& scc, storage::StronglyConnectedComponentDecomposition<ValueType> sccDecomp) {
     for (const auto& scc_ : sccDecomp) {
         if (scc == scc_) { return true; }
     }
@@ -402,7 +400,7 @@ std::pair<std::vector<ValueType>, std::vector<ValueType>> SparseDeterministicInf
     auto gains = std::vector<ValueType>(this->_transitionMatrix.getRowCount());
     auto biases = std::vector<ValueType>(this->_transitionMatrix.getRowCount());
     // Maps gain to state to probability
-    auto p = std::map<ValueType, std::map<unsigned long, ValueType>>();
+    auto p = std::map<ValueType, std::map<uint64_t, ValueType>>();
 
     storm::storage::StronglyConnectedComponentDecomposition<ValueType> bsccDecomp(this->_transitionMatrix,
                                                                              storm::storage::StronglyConnectedComponentDecompositionOptions().onlyBottomSccs().forceTopologicalSort());
@@ -421,7 +419,7 @@ std::pair<std::vector<ValueType>, std::vector<ValueType>> SparseDeterministicInf
     }
 
     // S_lt is our state set that keeps expanding, see step 6.
-    storm::storage::FlatSet<unsigned long> S_lt;
+    storm::storage::FlatSet<uint64_t> S_lt;
     for (auto bscc : bsccDecomp) {
         for (auto state : bscc.getStates()) { S_lt.insert(state); }
     }
@@ -436,7 +434,7 @@ std::pair<std::vector<ValueType>, std::vector<ValueType>> SparseDeterministicInf
         } // step 4
     }
 
-    for (unsigned long i = 0; i < m; ++i) {
+    for (uint64_t i = 0; i < m; ++i) {
         if (i > 0) {
             for (auto s : sccDecompNoBscc[i-1]) { S_lt.insert(s); } // Step 6 (the order is shuffled for performance reasons)
         }
@@ -474,22 +472,6 @@ std::pair<std::vector<ValueType>, std::vector<ValueType>> SparseDeterministicInf
             j++;
         }
     }
-
-    // To account for the transient states, we take the topo sort.
-    // We can then calculate the gain and bias by simply filling out the equations.
-    // auto topoSort = storm::utility::graph::getTopologicalSort(this->_transitionMatrix);
-    // for (auto state : topoSort) {
-    //     if (transientStates.contains(state)) {
-    //         auto successorGainSum = storm::utility::zero<ValueType>();
-    //         auto successorBiasSum = storm::utility::zero<ValueType>();
-    //         for (const auto& entry : this->_transitionMatrix.getRow(state)) {
-    //             successorGainSum += entry.getValue() * gains[entry.getColumn()];
-    //             successorBiasSum += entry.getValue() * biases[entry.getColumn()];
-    //         }
-    //         gains[state] = successorGainSum;
-    //         biases[state] = successorBiasSum + stateValuesGetter(state) + actionValuesGetter(state);
-    //     }
-    // }
 
     return std::pair<std::vector<ValueType>, std::vector<ValueType>>(gains, biases);
 }
