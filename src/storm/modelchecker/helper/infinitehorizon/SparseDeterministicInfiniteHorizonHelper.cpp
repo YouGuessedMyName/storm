@@ -1,5 +1,6 @@
 #include "SparseDeterministicInfiniteHorizonHelper.h"
 
+#include <boost/fusion/container/vector/vector.hpp>
 #include <numeric>
 
 #include "storm/adapters/RationalFunctionAdapter.h"
@@ -247,8 +248,7 @@ std::pair<ValueType, std::vector<ValueType>> SparseDeterministicInfiniteHorizonH
 }
 
 template <typename ValueType>
-std::map<ValueType, std::map<uint64_t, ValueType>> SparseDeterministicInfiniteHorizonHelper<ValueType>::computeGainProbabilities(Environment const& env,
-    std::map<ValueType, std::map<uint64_t, ValueType>> p, storm::storage::StronglyConnectedComponent scc, ValueType g, std::map<ValueType, storm::storage::FlatSet<uint64_t>> succgStates) {
+void SparseDeterministicInfiniteHorizonHelper<ValueType>::computeGainsTopologically(Environment const& env, std::vector<ValueType>& gains, storm::storage::StronglyConnectedComponent scc) {
     // we want that the returned vector is sorted as the bscc. So let's assert that the bscc is sorted ascendingly.
     STORM_LOG_ASSERT(std::is_sorted(scc.begin(), scc.end()), "Expected that sccs are sorted.");
 
@@ -271,8 +271,10 @@ std::map<ValueType, std::map<uint64_t, ValueType>> SparseDeterministicInfiniteHo
 
     // Build the equation system matrix and vector.
     storm::solver::GeneralLinearEquationSolverFactory<ValueType> linearEquationSolverFactory;
-    bool isEquationSystemFormat =
-        linearEquationSolverFactory.getEquationProblemFormat(subEnv) == storm::solver::LinearEquationSolverProblemFormat::EquationSystem;
+    if (linearEquationSolverFactory.getEquationProblemFormat(subEnv) != storm::solver::LinearEquationSolverProblemFormat::EquationSystem) {
+        std::cout << "Should use equation system format" << std::endl;
+        abort();
+    }
     storm::storage::SparseMatrixBuilder<ValueType> builder(scc.size(), scc.size());
     std::vector<ValueType> eqSysVector;
     eqSysVector.reserve(scc.size());
@@ -283,26 +285,29 @@ std::map<ValueType, std::map<uint64_t, ValueType>> SparseDeterministicInfiniteHo
     for (const auto& globalState : scc) { // TODO consider rates?
         ValueType probSumToPrecalculated = storm::utility::zero<ValueType>();
         auto localState = toLocalIndexMap[globalState];
-        builder.addDiagonalEntry(localState, storm::utility::one<ValueType>());
+        bool foundDiagonalEntry = false;
 
         for (const auto& entry : this->_transitionMatrix.getRow(globalState)) {
             entryValue = entry.getValue();
             if (toLocalIndexMap.contains(entry.getColumn())) {
                 uint64_t localCol = toLocalIndexMap[entry.getColumn()];
                 if (localState == localCol) { // We should add 1 in case this is the pgs value itself. If this is never found, then it was already set by addDiagonalEntry.
+                    foundDiagonalEntry = true;
                     builder.addNextValue(localState, localCol, storm::utility::one<ValueType>() - entryValue);
                 } else {
                     builder.addNextValue(localState, localCol, -entryValue);
                 }
-            } else if (succgStates[g].contains(entry.getColumn())) { // Calculate the sum in step 9.
-                probSumToPrecalculated += entryValue;
+            } else { // Calculate the sum in step 9.
+                probSumToPrecalculated += entryValue * gains[entry.getColumn()];
             }
+        }
+        if (! foundDiagonalEntry) {
+            builder.addDiagonalEntry(localState, storm::utility::one<ValueType>());
         }
         eqSysVector.push_back(probSumToPrecalculated);
     }
 
     auto matrix = builder.build();
-
     auto solver = linearEquationSolverFactory.create(subEnv, matrix);
     // Check solver requirements.
     auto requirements = solver->getRequirements(subEnv);
@@ -311,11 +316,9 @@ std::map<ValueType, std::map<uint64_t, ValueType>> SparseDeterministicInfiniteHo
     std::vector<ValueType> eqSysSol(scc.size(), storm::utility::zero<ValueType>());
     solver->solveEquations(subEnv, eqSysSol, eqSysVector);
 
-    // Now we are left with a vector eqSysSol of solution values, but we still need to set p accordingly.
     for (auto [globalState, localState] : toLocalIndexMap) {
-        p[g][globalState] = eqSysSol[localState];
+        gains[globalState] = eqSysSol[localState];
     }
-    return p;
 }
 
 template <typename ValueType>
@@ -357,13 +360,14 @@ std::vector<ValueType> SparseDeterministicInfiniteHorizonHelper<ValueType>::comp
     for (const auto& globalState : scc) { // TODO consider rates?
         ValueType biasSumPrecalculated = storm::utility::zero<ValueType>();
         auto localState = toLocalIndexMap[globalState];
-        builder.addDiagonalEntry(localState, storm::utility::one<ValueType>());
 
+        bool foundDiagonalEntry = false;
         for (const auto& entry : this->_transitionMatrix.getRow(globalState)) {
             entryValue = entry.getValue();
             if (toLocalIndexMap.contains(entry.getColumn())) {
                 uint64_t localCol = toLocalIndexMap[entry.getColumn()];
                 if (localState == localCol) { // We should add 1 in case this is the b(s) value itself. If this is never found, then it was already set by addDiagonalEntry.
+                    foundDiagonalEntry = true;
                     builder.addNextValue(localState, localCol, storm::utility::one<ValueType>() - entryValue);
                 } else {
                     builder.addNextValue(localState, localCol, -entryValue);
@@ -371,6 +375,9 @@ std::vector<ValueType> SparseDeterministicInfiniteHorizonHelper<ValueType>::comp
             } else if (S_lt.contains(entry.getColumn())) { // Calculate the sum in step 9.
                 biasSumPrecalculated += entryValue * biases[entry.getColumn()];
             }
+        }
+        if (! foundDiagonalEntry) {
+            builder.addDiagonalEntry(localState, storm::utility::one<ValueType>());
         }
         eqSysVector.push_back(biasSumPrecalculated + stateValuesGetter(globalState) + actionValuesGetter(globalState) - gains[globalState]);
     }
@@ -429,9 +436,57 @@ std::pair<std::vector<ValueType>, std::vector<ValueType>> SparseDeterministicInf
         unsigned int i = 0;
         for (auto state : bscc) {
             gains[state] = bsccGain;
-            biases[state] = bsccBiases[i];
+            biases[state] = bsccBiases[i]; // TODO check this
             i++;
         } // step 4
+
+        { // Debugging step to check if gain is correct for this BSCC
+            auto env2 = storm::Environment();
+            env2.solver().lra().setDetLraMethod(storm::solver::LraMethod::ValueIteration);
+            ValueType viGain = this->computeLraForBsccVi(env2, stateValuesGetter, actionValuesGetter, bscc);
+            double roundedViGain = storm::utility::convertNumber<double>(viGain);
+            double roundedGain = storm::utility::convertNumber<double>(bsccGain);
+            if (roundedViGain - roundedGain > 1e-5 || roundedViGain - roundedGain < -1e-5) {
+                std::cout << "BSCC gain wrong" << std::endl;
+                std::cout << "VI: " << roundedViGain << " " << "GainBias:" << roundedGain << std::endl;
+                abort();
+            }
+        }
+
+        { // Debugging step to check if biases are correct for this BSCC.
+            auto tooMuchDifference = false;
+            for (auto state : bscc.getStates()) {
+                auto sum = storm::utility::zero<ValueType>();
+                for (auto entry : this->_transitionMatrix.getRow(state)) {
+                    sum += entry.getValue() * biases[entry.getColumn()];
+                }
+                ValueType rightSide = sum + stateValuesGetter(state) + actionValuesGetter(state) - gains[state];
+                double roundedLeft = storm::utility::convertNumber<double>(biases[state]);
+                double roundedRight = storm::utility::convertNumber<double>(rightSide);
+                if (roundedLeft - roundedRight > 1e-5 || roundedLeft - roundedRight < -1e-5) {
+                    tooMuchDifference = true;
+                }
+            }
+            if (tooMuchDifference) {
+                std::cout << "biases wrong for BSCC!"<< std::endl;
+                std::cout << "s, b(s), right" << std::endl;
+                for (auto state : bscc.getStates()) {
+                    auto sum = storm::utility::zero<ValueType>();
+                    for (auto entry : this->_transitionMatrix.getRow(state)) {
+                        sum += entry.getValue() * biases[entry.getColumn()];
+                    }
+                    ValueType rightSide = sum + stateValuesGetter(state) + actionValuesGetter(state) - gains[state];
+                    std::cout << state << " " << biases[state] << " " << rightSide;
+                    double roundedLeft = storm::utility::convertNumber<double>(biases[state]);
+                    double roundedRight = storm::utility::convertNumber<double>(rightSide);
+                    if (roundedLeft - roundedRight > 1e-5 || roundedLeft - roundedRight < -1e-5) {
+                        std::cout << " <<<";
+                    }
+                    std::cout << std::endl;
+                }
+                abort();
+            }
+        }
     }
 
     for (uint64_t i = 0; i < m; ++i) {
@@ -440,60 +495,92 @@ std::pair<std::vector<ValueType>, std::vector<ValueType>> SparseDeterministicInf
         }
 
         auto Si = sccDecompNoBscc[i];
-
-
-        // Step 7-8
-        auto succgStates = std::map<ValueType, storm::storage::FlatSet<uint64_t>>();
-        for (auto s : Si) {
-            for (const auto& entry : this->_transitionMatrix.getRow(s)) {
-                if (entry.getValue() != storm::utility::zero<ValueType>() && S_lt.contains(entry.getColumn())) {
-                    auto g = gains[entry.getColumn()];
-                    succgStates[g].insert(entry.getColumn());
+        { // Assert Si and S_lt being disjoint.
+            for (auto s : Si.getStates()) {
+                if (S_lt.contains(s)) {
+                    std::cout << "Error: both Si and S_lt contained state " << s << std::endl;
+                    abort();
                 }
             }
         }
 
         // Step 9
-        for (auto g : succgStates | std::views::keys) {
-            p = this->computeGainProbabilities(env, p, Si, g, succgStates);
-        }
-
-        // Step 10
-        for (auto s : Si) {
-            for (ValueType g : succgStates | std::views::keys) {
-                gains[s] += p[g][s] * g;
-            }
-        }
+        this->computeGainsTopologically(env, gains, Si); // Modifies by reference.
 
         auto Si_biases = this->computeBiases(env, stateValuesGetter, actionValuesGetter, biases, Si, S_lt, gains); // step 11
         unsigned int j = 0;
-        for (auto s : Si) {
+        for (auto s : Si) { // TODO wrong
             biases[s] += Si_biases[j];
             j++;
         }
     }
 
-    { // Check here for debugging.
+    { // Debugging step to check if gains are correct
+        auto env2 = storm::Environment();
+        env2.solver().lra().setDetLraMethod(storm::solver::LraMethod::ValueIteration);
+        env2.solver().setForceExact(true);
+        auto viGains = this->computeLongRunAverageValues(env2, stateValuesGetter, actionValuesGetter);
+
+        bool tooMuchDifference = false;
+        for (uint64_t i = 0; i < gains.size(); i++) {
+            double roundedViGain = storm::utility::convertNumber<double>(viGains[i]);
+            double roundedGain = storm::utility::convertNumber<double>(gains[i]);
+            if (roundedViGain - roundedGain > 1e-5 || roundedViGain - roundedGain < -1e-5) {
+                tooMuchDifference = true;
+            }
+        }
+        if (tooMuchDifference) {
+            std::cout << "MC gain 1 is wrong!, version 2" << std::endl;
+            std::cout << "s, VI, PI" << std::endl;
+            for (uint64_t i = 0; i < gains.size(); i++) {
+                std::cout << i << " " << storm::utility::convertNumber<double>(viGains[i]) << " " << storm::utility::convertNumber<double>(gains[i]);
+                double roundedViGain = storm::utility::convertNumber<double>(viGains[i]);
+                double roundedGain = storm::utility::convertNumber<double>(gains[i]);
+                if (roundedViGain - roundedGain > 1e-5 || roundedViGain - roundedGain < -1e-5) {
+                    std::cout << " <<<";
+                }
+                std::cout << std::endl;
+            }
+            abort();
+        } else {
+            std::cout << "MC gain 1 OK" << std::endl;
+        }
+    }
+
+    { // Debugging step to check if biases are correct.
         auto tooMuchDifference = false;
         for (uint64_t state = 0; state < this->_transitionMatrix.getRowCount(); ++state) {
             auto sum = storm::utility::zero<ValueType>();
             for (auto entry : this->_transitionMatrix.getRow(state)) {
                 sum += entry.getValue() * biases[entry.getColumn()];
             }
-            auto rightSide = sum + stateValuesGetter(state) + actionValuesGetter(state) - gains[state];
-            if (biases[state] != rightSide) { tooMuchDifference = true; }
-            // auto roundedRightSide = storm::utility::convertNumber<double>(rightSide);
-            // auto roundedLeftSide = storm::utility::convertNumber<double>(biases[state]);
-            // auto diff = roundedRightSide - roundedLeftSide;
-            // if (diff > 1e-5 || diff < -1e-5) {
-            //
-            // }
+            ValueType rightSide = sum + stateValuesGetter(state) + actionValuesGetter(state) - gains[state];
+            double roundedLeft = storm::utility::convertNumber<double>(biases[state]);
+            double roundedRight = storm::utility::convertNumber<double>(rightSide);
+            if (roundedLeft - roundedRight > 1e-5 || roundedLeft - roundedRight < -1e-5) {
+                tooMuchDifference = true;
+            }
         }
         if (tooMuchDifference) {
-            std::cout << "state, left, right" << std::endl;
+            std::cout << "biases wrong!"<< std::endl;
+            std::cout << "s, b(s), right" << std::endl;
             for (uint64_t state = 0; state < this->_transitionMatrix.getRowCount(); ++state) {
-                
+                auto sum = storm::utility::zero<ValueType>();
+                for (auto entry : this->_transitionMatrix.getRow(state)) {
+                    sum += entry.getValue() * biases[entry.getColumn()];
+                }
+                ValueType rightSide = sum + stateValuesGetter(state) + actionValuesGetter(state) - gains[state];
+                std::cout << state << " " << biases[state] << " " << rightSide;
+                double roundedLeft = storm::utility::convertNumber<double>(biases[state]);
+                double roundedRight = storm::utility::convertNumber<double>(rightSide);
+                if (roundedLeft - roundedRight > 1e-5 || roundedLeft - roundedRight < -1e-5) {
+                    std::cout << " <<<";
+                }
+                std::cout << std::endl;
             }
+            abort();
+        } else {
+            std::cout << "biases OK" << std::endl;
         }
     }
 
