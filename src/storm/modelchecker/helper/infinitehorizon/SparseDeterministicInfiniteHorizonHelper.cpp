@@ -473,6 +473,30 @@ std::pair<std::vector<ValueType>, std::vector<ValueType>> SparseDeterministicInf
         }
     }
 
+    { // Check here for debugging.
+        auto tooMuchDifference = false;
+        for (uint64_t state = 0; state < this->_transitionMatrix.getRowCount(); ++state) {
+            auto sum = storm::utility::zero<ValueType>();
+            for (auto entry : this->_transitionMatrix.getRow(state)) {
+                sum += entry.getValue() * biases[entry.getColumn()];
+            }
+            auto rightSide = sum + stateValuesGetter(state) + actionValuesGetter(state) - gains[state];
+            if (biases[state] != rightSide) { tooMuchDifference = true; }
+            // auto roundedRightSide = storm::utility::convertNumber<double>(rightSide);
+            // auto roundedLeftSide = storm::utility::convertNumber<double>(biases[state]);
+            // auto diff = roundedRightSide - roundedLeftSide;
+            // if (diff > 1e-5 || diff < -1e-5) {
+            //
+            // }
+        }
+        if (tooMuchDifference) {
+            std::cout << "state, left, right" << std::endl;
+            for (uint64_t state = 0; state < this->_transitionMatrix.getRowCount(); ++state) {
+                
+            }
+        }
+    }
+
     return std::pair<std::vector<ValueType>, std::vector<ValueType>>(gains, biases);
 }
 

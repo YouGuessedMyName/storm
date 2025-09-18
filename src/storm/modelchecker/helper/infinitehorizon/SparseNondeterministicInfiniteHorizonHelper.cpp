@@ -308,7 +308,7 @@ pair<bool, storm::storage::Scheduler<ValueType>> SparseNondeterministicInfiniteH
         if (bestOffset != previousOffset) {
             schedulerWasChanged = true;
             scheduler.setChoice(bestOffset, state);
-            cout << state << " g-> " << bestOffset << endl;
+            cout << state << " b-> " << bestOffset << endl;
         }
     }
     return std::pair<bool, storm::storage::Scheduler<ValueType>>(schedulerWasChanged, scheduler);
@@ -348,7 +348,7 @@ pair<bool, storm::storage::Scheduler<ValueType>> SparseNondeterministicInfiniteH
         if (bestOffset != previousOffset) {
             schedulerWasChanged = true;
             scheduler.setChoice(bestOffset, state);
-            cout << state << " b-> " << bestOffset << endl;
+            cout << state << " g-> " << bestOffset << endl;
         }
     }
     return std::pair<bool, storm::storage::Scheduler<ValueType>>(schedulerWasChanged, scheduler);
@@ -433,7 +433,10 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
     std::map<uint64_t, ValueType> stateToGainMap;
     std::map<uint64_t, ValueType> stateToBiasMap;
     std::map<uint64_t, uint64_t> stateMecIndexMap; // state -> index in scc. Only used for calculating stateToGainMap and stateToBiasMap.
-    uint64_t bsccIndex = 0; for (const auto& key : mec.getStateSet()) { stateMecIndexMap[key] = bsccIndex; bsccIndex++; }
+    //uint64_t bsccIndex = 0; for (const auto& key : mec | std::views::keys) { stateMecIndexMap[key] = bsccIndex; bsccIndex++; }
+    for (uint64_t i = 0; i < mec.size(); i++) {
+        stateMecIndexMap[mecStatesVector[i]] = i;
+    }
 
     int n = 0;
     //cout << endl;
@@ -480,8 +483,34 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
                 abort();
         }
 
-
         auto [gains, biases] = helper->computeLraGainBias(env, inducedStateRewardsGetter, inducedActionRewardsGetter); // Line 2
+        { // Debugging
+            auto env2 = storm::Environment();
+            env2.solver().lra().setDetLraMethod(storm::solver::LraMethod::ValueIteration);
+            auto viGains = helper->computeLongRunAverageValues(env2, inducedStateRewardsGetter, inducedActionRewardsGetter);
+
+            bool tooMuchDifference = false;
+            for (uint64_t i = 0; i < gains.size(); i++) {
+                if (viGains[i] - gains[i] > 1e-5 || viGains[i] - gains[i] < -1e-5) {
+                    tooMuchDifference = true;
+                }
+            }
+            if (tooMuchDifference) {
+                cout << "MC gain is wrong!" << endl;
+                cout << "s, VI, PI" << endl;
+                for (uint64_t i = 0; i < gains.size(); i++) {
+                    cout << i << " " << viGains[i] << " " << gains[i];
+                    if (viGains[i] - gains[i] > 1e-5 || viGains[i] - gains[i] < -1e-5) {
+                        cout << " <<<";
+                    }
+                    cout << endl;
+                }
+                abort();
+            } else {
+                cout << "MC gain OK" << endl;
+            }
+        }
+
         for (const auto& [state, mecIndex] : stateMecIndexMap) {
             stateToGainMap[state] = gains[mecIndex];
             stateToBiasMap[state] = biases[mecIndex];
@@ -555,6 +584,7 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
                 cout << endl;
                 abort();
             }
+            cout << "VERSION 6" << endl;
             return exactResult;
         }
     }

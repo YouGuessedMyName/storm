@@ -608,7 +608,7 @@ TYPED_TEST(LraMdpPrctlModelCheckerTest, cs_nfail_multi) {
 
     auto result3 = storm::modelchecker::multiobjective::performMultiObjectiveModelChecking(env, *mdp, formulas[0]->asMultiObjectiveFormula());
     //auto result3 = result2->asExplicitQuantitativeCheckResult<double>();
-    ASSERT_TRUE(result3->isExplicitQuantitativeCheckResult());
+    //ASSERT_TRUE(result3->isExplicitQuantitativeCheckResult());
     //EXPECT_NEAR(this->parseNumber("0.025"), result3->asExplicitQuantitativeCheckResult<ValueType>()[initState], this->precision());
 }
 

@@ -154,11 +154,11 @@ std::vector<ValueType> SparseInfiniteHorizonHelper<ValueType, Nondeterministic>:
     auto method = env.solver().lra().getDetLraMethod();
 
     //TODO remove when merging
-    if (method == storm::solver::LraMethod::GainBiasEquations && ! Nondeterministic) {
-        auto helper = storm::modelchecker::helper::SparseDeterministicInfiniteHorizonHelper<ValueType>(this->_transitionMatrix);
-        auto [gain, _] = helper.computeLraGainBias(env, stateRewardsGetter, actionRewardsGetter);
-        return gain;
-    }
+    // if (method == storm::solver::LraMethod::GainBiasEquations && ! Nondeterministic) {
+    //     auto helper = storm::modelchecker::helper::SparseDeterministicInfiniteHorizonHelper<ValueType>(this->_transitionMatrix);
+    //     auto [gain, _] = helper.computeLraGainBias(env, stateRewardsGetter, actionRewardsGetter);
+    //     return gain;
+    // }
 
     // Prepare an environment for the underlying solvers.
     auto underlyingSolverEnvironment = env;
