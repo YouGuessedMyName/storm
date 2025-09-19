@@ -545,7 +545,7 @@ std::pair<std::vector<ValueType>, std::vector<ValueType>> SparseDeterministicInf
         } else {
             std::cout << "MC gain 1 OK" << std::endl;
         }
-    }
+    } // Debug: check if gains are correct (compare to VI)
 
     { // Debugging step to check if biases are correct.
         auto tooMuchDifference = false;
@@ -582,7 +582,7 @@ std::pair<std::vector<ValueType>, std::vector<ValueType>> SparseDeterministicInf
         } else {
             std::cout << "biases OK" << std::endl;
         }
-    }
+    } // Debug: check if biases are correct (check equation system)
 
     return std::pair<std::vector<ValueType>, std::vector<ValueType>>(gains, biases);
 }
