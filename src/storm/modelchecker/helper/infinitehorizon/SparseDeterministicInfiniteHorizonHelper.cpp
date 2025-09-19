@@ -402,23 +402,14 @@ bool sccDecompositionContainsScc(const storage::StronglyConnectedComponent& scc,
 
 template<typename ValueType>
 std::pair<std::vector<ValueType>, std::vector<ValueType>> SparseDeterministicInfiniteHorizonHelper<ValueType>::computeLraGainBias(
-    Environment const& env, ValueGetter const& stateValuesGetter, ValueGetter const& actionValuesGetter) {
+        Environment const& env, ValueGetter const& stateValuesGetter, ValueGetter const& actionValuesGetter) {
 
     auto gains = std::vector<ValueType>(this->_transitionMatrix.getRowCount());
     auto biases = std::vector<ValueType>(this->_transitionMatrix.getRowCount());
-    // Maps gain to state to probability
-    auto p = std::map<ValueType, std::map<uint64_t, ValueType>>();
 
     storm::storage::StronglyConnectedComponentDecomposition<ValueType> bsccDecomp(this->_transitionMatrix,
                                                                              storm::storage::StronglyConnectedComponentDecompositionOptions().onlyBottomSccs().forceTopologicalSort());
     storm::storage::StronglyConnectedComponentDecomposition<ValueType> oldSccDecomp(this->_transitionMatrix, storm::storage::StronglyConnectedComponentDecompositionOptions().forceTopologicalSort());
-    storm::storage::FlatSet<uint64_t> transientStates;
-    for (auto scc : oldSccDecomp) {
-        if (scc.size() == 1) {
-            transientStates.insert(scc.getStates().sequence()[0]);
-        }
-    }
-
     auto m = oldSccDecomp.size() - bsccDecomp.size();
     std::vector<storage::StronglyConnectedComponent> sccDecompNoBscc(0);
     for (auto scc : oldSccDecomp) {
@@ -436,7 +427,7 @@ std::pair<std::vector<ValueType>, std::vector<ValueType>> SparseDeterministicInf
         unsigned int i = 0;
         for (auto state : bscc) {
             gains[state] = bsccGain;
-            biases[state] = bsccBiases[i]; // TODO check this
+            biases[state] = bsccBiases[i]; // TODO ask if there really is no order on SCCs? The function computeLraForBsccGainBias sure seems to assert it.
             i++;
         } // step 4
 
@@ -451,7 +442,7 @@ std::pair<std::vector<ValueType>, std::vector<ValueType>> SparseDeterministicInf
                 std::cout << "VI: " << roundedViGain << " " << "GainBias:" << roundedGain << std::endl;
                 abort();
             }
-        }
+        } // Debug: check gain correct for this BSCC.
 
         { // Debugging step to check if biases are correct for this BSCC.
             auto tooMuchDifference = false;
@@ -486,30 +477,29 @@ std::pair<std::vector<ValueType>, std::vector<ValueType>> SparseDeterministicInf
                 }
                 abort();
             }
-        }
+        } // Debug: check if biases are correct for this BSCC.
     }
 
     for (uint64_t i = 0; i < m; ++i) {
         if (i > 0) {
             for (auto s : sccDecompNoBscc[i-1]) { S_lt.insert(s); } // Step 6 (the order is shuffled for performance reasons)
         }
-
         auto Si = sccDecompNoBscc[i];
-        { // Assert Si and S_lt being disjoint.
+        {
             for (auto s : Si.getStates()) {
                 if (S_lt.contains(s)) {
                     std::cout << "Error: both Si and S_lt contained state " << s << std::endl;
                     abort();
                 }
             }
-        }
+        } // Debug: Assert Si and S_lt being disjoint.
 
         // Step 9
         this->computeGainsTopologically(env, gains, Si); // Modifies by reference.
 
         auto Si_biases = this->computeBiases(env, stateValuesGetter, actionValuesGetter, biases, Si, S_lt, gains); // step 11
         unsigned int j = 0;
-        for (auto s : Si) { // TODO wrong
+        for (auto s : Si) { // TODO SCC order assumption.
             biases[s] += Si_biases[j];
             j++;
         }

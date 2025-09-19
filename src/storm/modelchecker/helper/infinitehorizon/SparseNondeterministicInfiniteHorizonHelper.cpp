@@ -350,16 +350,16 @@ pair<bool, std::vector<uint64_t>> biasImprovementStep(const storm::storage::Spar
 template<typename ValueType>
 std::pair<storm::storage::SparseMatrix<ValueType>, std::function<ValueType(uint64_t)>> applyScheduler(
         storm::storage::SparseMatrix<ValueType>& mecMatrix, std::vector<uint64_t>& scheduler, std::function<ValueType(uint64_t)> const& mecActionRewardsGetter) {
-    storm::storage::BitVector schedulerBitVector;
+    storm::storage::BitVector schedulerBitVector(mecMatrix.getRowCount());
     for (const auto& row : scheduler) { schedulerBitVector.set(row); }
-    auto detMatrix = mecMatrix.getSubmatrix(false, schedulerBitVector, schedulerBitVector);
+    auto detMatrix = mecMatrix.restrictRows(schedulerBitVector);
     std::function<ValueType(uint64_t)> detActionRewardsGetter = [&scheduler, &mecActionRewardsGetter](uint64_t detState) -> ValueType {
         // Scheduler is a map from mec states to the chosen rows
         // The mec states and det states are the same (in the detMatrix row = state)
         // So it's also a map from the det states to the chosen rows, which makes this correct.
         return mecActionRewardsGetter(scheduler[detState]);
     };
-    return std::pair<storm::storage::SparseMatrix<ValueType>, std::function<ValueType(uint64_t)>>(detMatrix, detActionRewardsGetter);
+    return std::pair(detMatrix, detActionRewardsGetter);
 }
 
 
@@ -372,20 +372,22 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
     // mecStatesToGlobalStates
     auto stateSet = mec.getStateSet(); // Need to store it in a variable first, otherwise it breaks...
     auto mecStatesToGlobalStates = std::vector<uint64_t> (stateSet.begin(), stateSet.end());
-    auto mecRowsToGlobalRows = std::vector<uint64_t> (mec.size());
+    auto mecRowsToGlobalRows = std::vector<uint64_t>();
 
     // First of all, we create a matrix for just the MEC. We limit it to only the choices that the MEC allows.
-    auto mecBitVector = storm::storage::BitVector(this->_transitionMatrix.getRowGroupCount());
+    auto mecStateBitVector = storm::storage::BitVector(this->_transitionMatrix.getRowGroupCount());
+    auto mecActionBitVector = storm::storage::BitVector(this->_transitionMatrix.getRowCount());
     for (const auto& state : mec.getStateSet()) {
+        mecStateBitVector.set(state);
         for (const auto& choice : mec.getChoicesForState(state)) {
             mecRowsToGlobalRows.push_back(choice);
-            mecBitVector.set(state);
+            mecActionBitVector.set(choice);
         }
     }
     ranges::sort(mecStatesToGlobalStates);
     ranges::sort(mecRowsToGlobalRows);
 
-    auto mecMatrix = this->_transitionMatrix.getSubmatrix(false, mecBitVector, mecBitVector);
+    auto mecMatrix = this->_transitionMatrix.getSubmatrix(false,  mecActionBitVector, mecStateBitVector);
     {
         cout << "MEC:" << endl;
         for (const auto& state : mec.getStateSet()) {
@@ -394,18 +396,25 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
             cout << endl;
         }
         cout << "original" << endl;
-        this->_transitionMatrix.printAsMatlabMatrix(cout);
-        cout << "new" << endl;
+        //this->_transitionMatrix.printAsMatlabMatrix(cout);
+        cout << "mecMatrix" << endl;
         mecMatrix.printAsMatlabMatrix(cout);
     } // Debug: check if making the MEC Matrix was a success.
 
     ValueType optimizationDirectionFactor = this->getOptimizationDirection() == storm::solver::OptimizationDirection::Maximize ? storm::utility::one<ValueType>() : -storm::utility::one<ValueType>();
-    std::function<ValueType(uint64_t)> mecStateRewardsGetter = [&optimizationDirectionFactor, &stateRewardsGetter, mecStatesToGlobalStates] (uint64_t mecState) {
-        return optimizationDirectionFactor * stateRewardsGetter(mecStatesToGlobalStates[mecState]);
+    std::function<ValueType(uint64_t)> mecStateRewardsGetter = [&optimizationDirectionFactor, &stateRewardsGetter, mecStatesToGlobalStates] (const uint64_t mecState) {
+        ValueType res = optimizationDirectionFactor * stateRewardsGetter(mecStatesToGlobalStates[mecState]); // Do NOT simplify, it will crash sometimes.
+        return res;
     };
+
+    std::function<ValueType(uint64_t)> mecActionRewardsGetter = [&optimizationDirectionFactor, &actionRewardsGetter, &mecRowsToGlobalRows] (const uint64_t mecRow) {
+        ValueType res = optimizationDirectionFactor * actionRewardsGetter(mecRowsToGlobalRows[mecRow]); // Do NOT simplify, it will crash sometimes.
+        return res;
+    };
+
     {
         cout << "MEC state, global state, rewards should match" << endl;
-        for (uint64_t i; i < mecStatesToGlobalStates.size(); i++) {
+        for (uint64_t i = 0; i < mecStatesToGlobalStates.size(); i++) {
             cout << i << " " << mecStatesToGlobalStates[i] << " " << stateRewardsGetter(mecStatesToGlobalStates[i]) << " " << mecStateRewardsGetter(i) << endl;
             if (stateRewardsGetter(mecStatesToGlobalStates[i]) != optimizationDirectionFactor * mecStateRewardsGetter(i)) {
                 cout << "Mismatch" << endl;
@@ -413,12 +422,10 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
             }
         }
     } // Debug: check if state rewards are correct.
-    std::function<ValueType(uint64_t)> mecActionRewardsGetter = [&optimizationDirectionFactor, &actionRewardsGetter, &mecRowsToGlobalRows] (uint64_t mecRow) {
-        return optimizationDirectionFactor * actionRewardsGetter(mecRowsToGlobalRows[mecRow]);
-    };
+
     {
         cout << "MEC row, global row, global rew, mec rew, rewards should match" << endl;
-        for (uint64_t i; i < mecRowsToGlobalRows.size(); i++) {
+        for (uint64_t i = 0; i < mecRowsToGlobalRows.size(); i++) {
             cout << i << " " << mecRowsToGlobalRows[i] << " " << actionRewardsGetter(mecRowsToGlobalRows[i]) << " " << mecActionRewardsGetter(i) << endl;
             if (actionRewardsGetter(mecRowsToGlobalRows[i]) != optimizationDirectionFactor * mecActionRewardsGetter(i)) {
                 cout << "Mismatch" << endl;
@@ -428,7 +435,10 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
     } // Debug: check if action rewards are correct.
 
     // Initialized to always point at the first row of the row group.
-    auto scheduler = std::vector<uint64_t>(mecMatrix.getRowGroupIndices().begin(), mecMatrix.getRowGroupIndices().end());
+    auto scheduler = std::vector<uint64_t>(mecMatrix.getRowGroupCount(), 0);
+    for (uint64_t i = 0; i < mecMatrix.getRowGroupCount (); i++) {
+        scheduler[i] = mecMatrix.getRowGroupIndices()[i];
+    }
     auto [detMatrix, detActionRewardsGetter] = applyScheduler(mecMatrix, scheduler, mecActionRewardsGetter);
     auto detStateRewardsGetter = mecStateRewardsGetter; // Rename for clarity.
     auto helper = std::make_unique<storm::modelchecker::helper::SparseDeterministicInfiniteHorizonHelper<ValueType>>(detMatrix);
@@ -442,7 +452,7 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
         detMatrix.printAsMatlabMatrix(cout);
 
         cout << "det row, MEC row, det rew, MEC rew rewards should match" << endl;
-        for (uint64_t i; i < scheduler.size(); i++) {
+        for (uint64_t i = 0; i < scheduler.size(); i++) {
             cout << i << " " << scheduler[i] << " " << detActionRewardsGetter(i) << " " << mecActionRewardsGetter(scheduler[i]) << endl;
             if (detActionRewardsGetter(i) != optimizationDirectionFactor * mecActionRewardsGetter(scheduler[i])) {
                 cout << "Mismatch" << endl;
@@ -462,7 +472,7 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
     while (true) {
         cout << n << " -----------------------------" << oldSchedulers.size() << endl; // For debugging
         {
-            for (uint64_t state; state < gains.size(); state++) {
+            for (uint64_t state = 0; state < gains.size(); state++) {
                 if (oldGains[state] * optimizationDirectionFactor > gains[state] * optimizationDirectionFactor) {
                     cout << "Gain got worse, this should never happen" << endl;
                     cout << this->getOptimizationDirection();
@@ -480,7 +490,7 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
                     }
                 }
                 if (sameSoFar) {
-                    cout << "Scheduler repeating." << endl;
+                    cout << "Scheduler repeating. This might be due to numerical instability, try --exact." << endl;
                     abort();
                 }
             }
@@ -494,12 +504,51 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
         if (schedulerChanged) {
             std::tie(detMatrix, detActionRewardsGetter) = applyScheduler(mecMatrix, scheduler, mecActionRewardsGetter);
             helper = std::make_unique<SparseDeterministicInfiniteHorizonHelper<ValueType>>(detMatrix);
+            {
+                cout << "Scheduler:" << endl;
+                cout << "mecState, choice" << endl;
+                for (uint64_t i = 0; i < scheduler.size(); i++) {
+                    cout << i << " " << scheduler[i] << " " << endl;
+                }
+                cout << "detMatrix:" << endl;
+                detMatrix.printAsMatlabMatrix(cout);
+
+                cout << "det row, MEC row, det rew, MEC rew rewards should match" << endl;
+                for (uint64_t i = 0; i < scheduler.size(); i++) {
+                    cout << i << " " << scheduler[i] << " " << detActionRewardsGetter(i) << " " << mecActionRewardsGetter(scheduler[i]) << endl;
+                    if (detActionRewardsGetter(i) != optimizationDirectionFactor * mecActionRewardsGetter(scheduler[i])) {
+                        cout << "Mismatch" << endl;
+                        abort();
+                    }
+                }
+            } // Debug: check if applying the scheduler was a success, and check if the action rewards are still right
+            {
+                cout << "Det state, global state, rewards should match" << endl;
+                for (uint64_t i = 0; i < mecStatesToGlobalStates.size(); i++) {
+                    cout << i << " " << mecStatesToGlobalStates[i] << " " << stateRewardsGetter(mecStatesToGlobalStates[i]) << " " << detStateRewardsGetter(i) << endl;
+                    if (stateRewardsGetter(mecStatesToGlobalStates[i]) != optimizationDirectionFactor * detStateRewardsGetter(i)) {
+                        cout << "Mismatch" << endl;
+                        abort();
+                    }
+                }
+            } // Debug: check if state rewards are correct.
             n++;
         } else {
             // We just return the first gain since they should all be the same in a MEC.
             ValueType exactResult = optimizationDirectionFactor * gains[0];
-            cout << "VERSION 9" << endl;
-            return exactResult;
+            {
+                double valueIterationResult = storm::utility::convertNumber<double>(computeLraForMecVi(env, stateRewardsGetter, actionRewardsGetter, mec));
+                double roundedResult = storm::utility::convertNumber<double>(exactResult);
+                auto diff = roundedResult - valueIterationResult;
+                if (diff > 1e-5 || diff < -1e-5) {
+                    cout << "Wrong result compared to VI!" << endl;
+                    cout << "VI: " << valueIterationResult << " PI: " << roundedResult << " DIR: " << this->getOptimizationDirection() << endl;
+                    abort();
+                } else {
+                    cout << "Result OK" << endl;
+                }
+                return exactResult;
+            } // Debug: compare final result to VI
         }
     }
 }
