@@ -32,6 +32,8 @@ class LongRunAverageSolverEnvironment {
     storm::RationalNumber const& getAperiodicFactor() const;
     void setAperiodicFactor(storm::RationalNumber value);
 
+    std::string getCertificateFilename() const;
+
    private:
     storm::solver::LraMethod detMethod;
     bool detMethodSetFromDefault;
@@ -42,6 +44,8 @@ class LongRunAverageSolverEnvironment {
     storm::RationalNumber precision;
     bool relative;
     boost::optional<uint64_t> maxIters;
+
+    std::string certificateFilename;
 
     storm::RationalNumber aperiodicFactor;
 };

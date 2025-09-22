@@ -91,4 +91,8 @@ void LongRunAverageSolverEnvironment::setAperiodicFactor(storm::RationalNumber v
     aperiodicFactor = value;
 }
 
+std::string LongRunAverageSolverEnvironment::getCertificateFilename() const {
+    return certificateFilename;
+}
+
 }  // namespace storm

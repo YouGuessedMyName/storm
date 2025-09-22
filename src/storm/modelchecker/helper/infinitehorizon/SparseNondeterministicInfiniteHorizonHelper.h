@@ -81,13 +81,14 @@ class SparseNondeterministicInfiniteHorizonHelper : public SparseInfiniteHorizon
     ValueType computeLraForMecLp(Environment const& env, ValueGetter const& stateValuesGetter, ValueGetter const& actionValuesGetter,
                                  storm::storage::MaximalEndComponent const& mec);
 
-
+    bool checkMecCertificate(storm::storage::MaximalEndComponent const& mec, ValueType lowerBound, ValueType upperBound,
+                             std::vector<ValueType> const& certificateVector, ValueGetter const& stateRewardsGetter, ValueGetter const& actionRewardsGetter);
     /*!
      * As computeLraForMec but uses policy/strategy iteration.
      * @see Algorithm 1 in Kretinsky and Meggendorfer (2017): https://doi.org/10.48550/arXiv.1707.01859
      */
     ValueType computeLraForMecPi(Environment const& env, ValueGetter const& stateValuesGetter, ValueGetter const& actionValuesGetter,
-                                 storm::storage::MaximalEndComponent const& mec);
+                                 storm::storage::MaximalEndComponent const& mec, std::vector<ValueType>& biases, storm::storage::SparseMatrix<ValueType>& mecMatrix);
 
     std::pair<storm::storage::SparseMatrix<ValueType>, std::vector<ValueType>> buildSspMatrixVector(
         std::vector<ValueType> const& mecLraValues, std::vector<uint64_t> const& inputToSspStateMap, storm::storage::BitVector const& statesNotInComponent,
