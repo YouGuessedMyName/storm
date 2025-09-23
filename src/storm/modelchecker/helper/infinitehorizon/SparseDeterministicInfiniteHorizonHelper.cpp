@@ -431,7 +431,7 @@ std::pair<std::vector<ValueType>, std::vector<ValueType>> SparseDeterministicInf
             i++;
         } // step 4
 
-        { // Debugging step to check if gain is correct for this BSCC
+        /*{ // Debugging step to check if gain is correct for this BSCC
             auto env2 = storm::Environment();
             env2.solver().lra().setDetLraMethod(storm::solver::LraMethod::ValueIteration);
             ValueType viGain = this->computeLraForBsccVi(env2, stateValuesGetter, actionValuesGetter, bscc);
@@ -442,9 +442,9 @@ std::pair<std::vector<ValueType>, std::vector<ValueType>> SparseDeterministicInf
                 std::cout << "VI: " << roundedViGain << " " << "GainBias:" << roundedGain << std::endl;
                 abort();
             }
-        } // Debug: check gain correct for this BSCC.
+        }*/ // Debug: check gain correct for this BSCC.
 
-        { // Debugging step to check if biases are correct for this BSCC.
+        /*{ // Debugging step to check if biases are correct for this BSCC.
             auto tooMuchDifference = false;
             for (auto state : bscc.getStates()) {
                 auto sum = storm::utility::zero<ValueType>();
@@ -477,7 +477,7 @@ std::pair<std::vector<ValueType>, std::vector<ValueType>> SparseDeterministicInf
                 }
                 abort();
             }
-        } // Debug: check if biases are correct for this BSCC.
+        }*/ // Debug: check if biases are correct for this BSCC.
     }
 
     for (uint64_t i = 0; i < m; ++i) {
@@ -485,14 +485,14 @@ std::pair<std::vector<ValueType>, std::vector<ValueType>> SparseDeterministicInf
             for (auto s : sccDecompNoBscc[i-1]) { S_lt.insert(s); } // Step 6 (the order is shuffled for performance reasons)
         }
         auto Si = sccDecompNoBscc[i];
-        {
+        /*{
             for (auto s : Si.getStates()) {
                 if (S_lt.contains(s)) {
                     std::cout << "Error: both Si and S_lt contained state " << s << std::endl;
                     abort();
                 }
             }
-        } // Debug: Assert Si and S_lt being disjoint.
+        }*/ // Debug: Assert Si and S_lt being disjoint.
 
         // Step 9
         this->computeGainsTopologically(env, gains, Si); // Modifies by reference.
@@ -505,7 +505,7 @@ std::pair<std::vector<ValueType>, std::vector<ValueType>> SparseDeterministicInf
         }
     }
 
-    { // Debugging step to check if gains are correct
+    /* { // Debugging step to check if gains are correct
         auto env2 = storm::Environment();
         env2.solver().lra().setDetLraMethod(storm::solver::LraMethod::ValueIteration);
         env2.solver().setForceExact(true);
@@ -535,9 +535,9 @@ std::pair<std::vector<ValueType>, std::vector<ValueType>> SparseDeterministicInf
         } else {
             std::cout << "MC gain 1 OK" << std::endl;
         }
-    } // Debug: check if gains are correct (compare to VI)
+    } */ // Debug: check if gains are correct (compare to VI)
 
-    { // Debugging step to check if biases are correct.
+    /* { // Debugging step to check if biases are correct.
         auto tooMuchDifference = false;
         for (uint64_t state = 0; state < this->_transitionMatrix.getRowCount(); ++state) {
             auto sum = storm::utility::zero<ValueType>();
@@ -572,7 +572,7 @@ std::pair<std::vector<ValueType>, std::vector<ValueType>> SparseDeterministicInf
         } else {
             std::cout << "biases OK" << std::endl;
         }
-    } // Debug: check if biases are correct (check equation system)
+    } */ // Debug: check if biases are correct (check equation system)
 
     return std::pair<std::vector<ValueType>, std::vector<ValueType>>(gains, biases);
 }

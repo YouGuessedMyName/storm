@@ -644,15 +644,15 @@ ValueType SparseNondeterministicInfiniteHorizonHelper<ValueType>::computeLraForM
             ValueType exactResult = optimizationDirectionFactor * gains[0]; // We just return the first gain since they should all be the same in a MEC.
             {
                 double valueIterationResult = storm::utility::convertNumber<double>(computeLraForMecVi(env, stateRewardsGetter, actionRewardsGetter, mec));
-                double roundedResult = storm::utility::convertNumber<double>(exactResult);
-                auto diff = roundedResult - valueIterationResult;
-                if (diff > 1e-5 || diff < -1e-5) {
-                    cout << "Wrong result compared to VI!" << endl;
-                    cout << "VI: " << valueIterationResult << " PI: " << roundedResult << " DIR: " << this->getOptimizationDirection() << endl;
-                    abort();
-                } else {
-                    cout << "Result OK" << endl;
-                }
+                //double roundedResult = storm::utility::convertNumber<double>(exactResult);
+                //auto diff = roundedResult - valueIterationResult;
+                // if (diff > 1e-5 || diff < -1e-5) {
+                //     // cout << "Wrong result compared to VI!" << endl;
+                //     // cout << "VI: " << valueIterationResult << " PI: " << roundedResult << " DIR: " << this->getOptimizationDirection() << endl;
+                //     // abort();
+                // } else {
+                //     cout << "Result OK" << endl;
+                // }
             } // Debug: compare final result to VI
             for (uint64_t i = 0; i < biases.size(); i++) { biases[i] = optimizationDirectionFactor * biases[i]; } // We might flip the sign on the biases in case we minimized.
             return exactResult;
